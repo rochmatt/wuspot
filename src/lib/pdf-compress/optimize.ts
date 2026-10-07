@@ -120,8 +120,11 @@ export function stripPrivateData(doc: PDFDocument): void {
   }
 }
 
-/** Garbage collection: hapus objek tidak langsung yang tidak terjangkau dari Root/Info. */
-export function removeUnreachable(doc: PDFDocument): number {
+/**
+ * Garbage collection: hapus objek tidak langsung yang tidak terjangkau dari
+ * Root/Info. Mengembalikan objek yang dihapus (bisa dipakai untuk undo).
+ */
+export function removeUnreachable(doc: PDFDocument): Array<[PDFRef, PDFObject]> {
   const { context } = doc;
   const reachable = new Set<PDFRef>();
   const stack: PDFObject[] = [];
@@ -150,11 +153,11 @@ export function removeUnreachable(doc: PDFDocument): number {
     }
   }
 
-  let removed = 0;
-  for (const [ref] of context.enumerateIndirectObjects()) {
-    if (!reachable.has(ref)) {
-      context.delete(ref);
-      removed++;
+  const removed: Array<[PDFRef, PDFObject]> = [];
+  for (const entry of context.enumerateIndirectObjects()) {
+    if (!reachable.has(entry[0])) {
+      context.delete(entry[0]);
+      removed.push(entry);
     }
   }
   return removed;

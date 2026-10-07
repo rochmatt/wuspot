@@ -58,6 +58,19 @@ export async function openDocument(bytes: Uint8Array, password?: string): Promis
   }
 }
 
+/**
+ * Tutup dokumen dan hentikan worker-nya. Di pdf.js v6 PDFDocumentProxy
+ * tidak punya destroy(); yang dihancurkan adalah loadingTask-nya.
+ */
+export async function closeDocument(doc: PDFDocumentProxy | null | undefined): Promise<void> {
+  if (!doc) return;
+  try {
+    await doc.loadingTask.destroy();
+  } catch {
+    // Sudah tertutup atau worker sudah mati; tidak ada yang perlu dilakukan.
+  }
+}
+
 const PASSWORD_NEEDED = 1;
 const PASSWORD_INCORRECT = 2;
 
