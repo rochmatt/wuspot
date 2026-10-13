@@ -1,0 +1,142 @@
+.page {
+  padding-top: 12px;
+  padding-bottom: 96px;
+}
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 760px) minmax(0, 300px);
+  gap: 48px;
+  align-items: start;
+  margin-top: 10px;
+}
+
+/* selembar folio: margin merah ganda di kiri, garis biru tipis per bagian */
+.doc {
+  --m: 72px;
+  position: relative;
+  padding: 44px 48px 40px calc(var(--m) + 28px);
+  border-radius: var(--r-sm);
+  background-color: var(--sheet);
+  background-image:
+    linear-gradient(var(--margin), var(--margin)), linear-gradient(var(--margin), var(--margin));
+  background-size:
+    1px 100%,
+    1px 100%;
+  background-position:
+    calc(var(--m) - 5px) 0,
+    calc(var(--m) - 1px) 0;
+  background-repeat: no-repeat;
+  box-shadow: var(--paper-shadow);
+}
+.head {
+  padding-bottom: 22px;
+  border-bottom: 1.5px solid var(--ink-2);
+}
+.h1 {
+  font-size: 44px;
+  font-weight: 800;
+  line-height: 1.06;
+  letter-spacing: -0.025em;
+}
+.lead {
+  margin-top: 12px;
+  font-size: 18px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+.updated {
+  margin-top: 14px;
+  font: 400 13px/1.4 var(--mono);
+  color: var(--muted);
+}
+.section {
+  padding-top: 26px;
+}
+.section + .section {
+  margin-top: 6px;
+  border-top: 1px solid var(--lines);
+}
+.h2 {
+  position: relative;
+  margin-bottom: 10px;
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+}
+.num {
+  position: absolute;
+  right: calc(100% + 28px + 18px);
+  top: 0.25em;
+  font: 600 14px/1 var(--mono);
+  color: var(--muted);
+}
+.section p {
+  max-width: 38em;
+  color: var(--ink-2);
+  font-size: 17px;
+  line-height: 1.65;
+}
+.section p + p {
+  margin-top: 12px;
+}
+.list {
+  max-width: 38em;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: butir;
+}
+.list li {
+  position: relative;
+  padding: 6px 0 6px 32px;
+  font-size: 17px;
+  line-height: 1.6;
+  color: var(--ink-2);
+  counter-increment: butir;
+}
+.list li::before {
+  content: counter(butir, lower-alpha) ".";
+  position: absolute;
+  left: 0;
+  top: 7px;
+  font: 600 14px/1.6 var(--mono);
+  color: var(--kraft-deep);
+}
+.aside {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+@media (max-width: 1059px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+    max-width: 760px;
+  }
+}
+@media (max-width: 599px) {
+  .page {
+    padding-top: 4px;
+    padding-bottom: 72px;
+  }
+  .doc {
+    --m: 14px;
+    padding: 26px 18px 28px 30px;
+  }
+  .h1 {
+    font-size: 32px;
+  }
+  .lead {
+    font-size: 17px;
+  }
+  .num {
+    position: static;
+    display: inline-block;
+    margin-right: 6px;
+    vertical-align: 2px;
+  }
+  .section p,
+  .list li {
+    font-size: 16px;
+  }
+}

@@ -287,6 +287,21 @@ function imageStream(ctx: PDFContext, dict: Record<string, unknown>, data: Uint8
   return ctx.register(ctx.stream(data, dict as Parameters<PDFContext["stream"]>[1]));
 }
 
+function hexEncode(data: Uint8Array): Uint8Array {
+  return new TextEncoder().encode(`${Buffer.from(data).toString("hex")}>`);
+}
+
+/** RunLength sederhana: hanya run literal (cukup untuk menguji dekoder). */
+function runLengthEncode(data: Uint8Array): Uint8Array {
+  const out: number[] = [];
+  for (let i = 0; i < data.length; i += 128) {
+    const chunk = data.subarray(i, i + 128);
+    out.push(chunk.length - 1, ...chunk);
+  }
+  out.push(128);
+  return new Uint8Array(out);
+}
+
 describe("images: findImageCandidates", () => {
   it("memilih gambar yang aman dan melewati yang berisiko", async () => {
     const doc = await PDFDocument.create();
@@ -314,7 +329,9 @@ describe("images: findImageCandidates", () => {
       decode: imageStream(ctx, { ...base, ColorSpace: "DeviceRGB", Filter: "FlateDecode", Decode: [1, 0, 1, 0, 1, 0] }, packed),
       mask: imageStream(ctx, { ...base, ColorSpace: "DeviceRGB", Filter: "FlateDecode", Mask: [0, 10, 0, 10, 0, 10] }, packed),
       imageMask: imageStream(ctx, { ...base, ImageMask: true, BitsPerComponent: 1, Filter: "FlateDecode" }, packed),
-      chain: imageStream(ctx, { ...base, ColorSpace: "DeviceRGB", Filter: ["ASCIIHexDecode", "FlateDecode"] }, packed),
+      hexChain: imageStream(ctx, { ...base, ColorSpace: "DeviceRGB", Filter: ["ASCIIHexDecode", "FlateDecode"] }, hexEncode(packed)),
+      chain: imageStream(ctx, { ...base, ColorSpace: "DeviceRGB", Filter: ["FlateDecode", "DCTDecode"] }, packed),
+      lzw: imageStream(ctx, { ...base, ColorSpace: "DeviceRGB", Filter: "LZWDecode" }, packed),
       jpx: imageStream(ctx, { ...base, ColorSpace: "DeviceRGB", Filter: "JPXDecode" }, packed),
       tiny: imageStream(ctx, { ...base, Width: 20, Height: 20, ColorSpace: "DeviceRGB", Filter: "FlateDecode" }, packed),
       smallStream: imageStream(ctx, { ...base, ColorSpace: "DeviceRGB", Filter: "FlateDecode" }, packed.subarray(0, 5000)),
@@ -337,7 +354,7 @@ describe("images: findImageCandidates", () => {
     await doc.flush(); // embedJpg baru menulis stream saat flush
 
     const found = new Set(findImageCandidates(doc).map((c) => c.refTag));
-    const expectIn = ["flateRgb", "flateArrFilter", "iccRgb", "goodPredictor"] as const;
+    const expectIn = ["flateRgb", "flateArrFilter", "iccRgb", "goodPredictor", "hexChain", "lzw"] as const;
     for (const k of expectIn) expect(found.has(refs[k].tag), k).toBe(true);
     const expectOut = [
       "iccCmyk",
@@ -417,6 +434,27 @@ describe("images: decode Flate", () => {
       predictor: 1,
     });
     expect(short).toBeNull();
+  });
+
+  it("rantai ASCIIHex + Flate dan RunLength (generator lama/reportlab) juga terbaca", async () => {
+    const w = 96;
+    const h = 64;
+    const raw = noisyRgb(w, h, 3);
+    const doc = await PDFDocument.create();
+    const ctx = doc.context;
+    const base = { Type: "XObject", Subtype: "Image", Width: w, Height: h, BitsPerComponent: 8, ColorSpace: "DeviceRGB" };
+
+    const hexRef = imageStream(ctx, { ...base, Filter: ["ASCIIHexDecode", "FlateDecode"] }, hexEncode(await deflateBytes(raw)));
+    const hexStream = rawAt(ctx, hexRef);
+    const hexInfo = analyzeImage(ctx, hexStream);
+    expect(hexInfo).toMatchObject({ kind: "flate", width: w, height: h });
+    expect(await decodeFlateRaster(hexStream, hexInfo!)).toEqual(raw);
+
+    const rleRef = imageStream(ctx, { ...base, Filter: ["ASCIIHexDecode", "RunLengthDecode"] }, hexEncode(runLengthEncode(raw)));
+    const rleStream = rawAt(ctx, rleRef);
+    const rleInfo = analyzeImage(ctx, rleStream);
+    expect(rleInfo).toMatchObject({ kind: "flate" });
+    expect(await decodeFlateRaster(rleStream, rleInfo!)).toEqual(raw);
   });
 
   it("rasterToRgba: rata-rata blok & konversi abu-abu", () => {

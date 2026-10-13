@@ -71,6 +71,22 @@ export async function closeDocument(doc: PDFDocumentProxy | null | undefined): P
   }
 }
 
+/**
+ * Tulis ulang seluruh dokumen lewat pdf.js (fitur "extractPages"): PDF baru
+ * dengan isi halaman yang sama (teks tetap teks). Dipakai bila pdf-lib tidak
+ * bisa membaca struktur file aslinya. Catatan: enkripsi ikut disalin, jadi
+ * ini tidak membantu untuk PDF terkunci. `null` bila gagal.
+ */
+export async function rewriteDocument(doc: PDFDocumentProxy): Promise<Uint8Array | null> {
+  if (typeof doc.extractPages !== "function") return null;
+  try {
+    const out = await doc.extractPages([{ document: null }]);
+    return out instanceof Uint8Array && out.length > 0 ? out : null;
+  } catch {
+    return null;
+  }
+}
+
 const PASSWORD_NEEDED = 1;
 const PASSWORD_INCORRECT = 2;
 

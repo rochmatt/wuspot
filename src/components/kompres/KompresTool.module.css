@@ -1,0 +1,930 @@
+/* ==========================================================================
+   Formulir di dalam map coklat
+   ========================================================================== */
+
+.folder {
+  --lip: 26px; /* tinggi tepi sampul depan */
+  position: relative;
+  container: folder / inline-size;
+  margin-top: 30px; /* ruang untuk tab map */
+  padding: 10px 10px calc(var(--lip) - 8px);
+  border-radius: 0 var(--r-lg) var(--r-lg) var(--r-lg);
+  background: var(--kraft);
+  background-image: var(--kraft-grain);
+  box-shadow: 0 18px 30px -26px rgb(var(--shadow-rgb) / 0.7);
+}
+/* sampul depan map: tepinya mengintip di bawah lembar, sedikit lebih muda
+   warnanya, sudutnya dipotong miring seperti map sungguhan */
+.folder::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1;
+  height: var(--lip);
+  border-radius: 0 0 var(--r-lg) var(--r-lg);
+  background-color: var(--kraft-front);
+  background-image: linear-gradient(rgb(255 255 255 / 0.22), transparent 2px), var(--kraft-grain);
+  clip-path: polygon(0 8px, 20px 0, calc(100% - 20px) 0, 100% 8px, 100% 100%, 0 100%);
+  pointer-events: none;
+}
+/* bayangan tipis sampul depan di atas lembar */
+.folder::before {
+  content: "";
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: calc(var(--lip) - 1px);
+  z-index: 1;
+  height: 5px;
+  background: linear-gradient(transparent, rgb(var(--shadow-rgb) / 0.12));
+  pointer-events: none;
+}
+.folderTab {
+  position: absolute;
+  left: 0;
+  bottom: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 30px;
+  padding: 0 30px 0 12px;
+  border-radius: var(--r-sm) 0 0 0;
+  /* tab potong miring di sisi kanan */
+  clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 100%, 0 100%);
+  background: inherit;
+  font: 600 12px/1 var(--mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--on-kraft);
+  white-space: nowrap;
+}
+.folderTab b {
+  padding: 3px 6px 2px;
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--sheet) 55%, transparent);
+  font-weight: 600;
+}
+
+/* lembar folio: garis margin merah ganda */
+.sheet {
+  --m: 64px;
+  --ml: var(--m);
+  --pad: 24px;
+  position: relative;
+  border-radius: var(--r-sm);
+  background-color: var(--sheet);
+  background-image: linear-gradient(
+    90deg,
+    transparent calc(var(--ml) - 5px),
+    var(--margin) calc(var(--ml) - 5px),
+    var(--margin) calc(var(--ml) - 4px),
+    transparent calc(var(--ml) - 4px),
+    transparent calc(var(--ml) - 1px),
+    var(--margin) calc(var(--ml) - 1px),
+    var(--margin) var(--ml),
+    transparent var(--ml)
+  );
+  box-shadow: var(--paper-shadow);
+}
+
+/* baris kepercayaan, baris pertama formulir */
+.trust {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 46px;
+  padding: 10px var(--pad) 10px calc(var(--m) + 20px);
+  font-size: 15px;
+  line-height: 1.4;
+  color: var(--ink);
+}
+.trust svg {
+  flex: none;
+}
+.trust b {
+  font-weight: 700;
+}
+
+.field {
+  display: grid;
+  grid-template-columns: var(--m) minmax(0, 1fr);
+  border-top: 1px solid var(--lines);
+}
+.num {
+  padding: 21px 14px 0 0;
+  text-align: right;
+  font: 600 14px/1 var(--mono);
+  color: var(--muted);
+}
+.fbody {
+  min-width: 0;
+  padding: 17px var(--pad) 24px 20px;
+}
+.fieldset {
+  margin: 0;
+  border: 0;
+  min-inline-size: 0;
+}
+.fieldset:disabled {
+  opacity: 0.6;
+}
+.flabel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 10px;
+  margin-bottom: 12px;
+  padding: 0;
+}
+legend.flabel {
+  float: left;
+  width: 100%;
+}
+legend.flabel + * {
+  clear: both;
+}
+.ftitle {
+  font-size: 17px;
+  font-weight: 750;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+  color: var(--ink);
+}
+.flabel small {
+  font-size: 14px;
+  color: var(--muted);
+}
+
+/* ---------- 01: kotak file, sudutnya tanda potong seperti kotak pas foto ---------- */
+.drop {
+  --c: var(--muted);
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 20px 22px;
+  border-radius: var(--r-sm);
+  background-color: var(--sheet-2);
+  background-image:
+    linear-gradient(var(--c), var(--c)), linear-gradient(var(--c), var(--c)), linear-gradient(var(--c), var(--c)),
+    linear-gradient(var(--c), var(--c)), linear-gradient(var(--c), var(--c)), linear-gradient(var(--c), var(--c)),
+    linear-gradient(var(--c), var(--c)), linear-gradient(var(--c), var(--c));
+  background-repeat: no-repeat;
+  background-size:
+    18px 1.5px,
+    1.5px 18px,
+    18px 1.5px,
+    1.5px 18px,
+    18px 1.5px,
+    1.5px 18px,
+    18px 1.5px,
+    1.5px 18px;
+  background-position:
+    0 0,
+    0 0,
+    100% 0,
+    100% 0,
+    0 100%,
+    0 100%,
+    100% 100%,
+    100% 100%;
+  transition: background-color 0.15s;
+}
+.drop:hover,
+.dropOver {
+  --c: var(--pen);
+}
+.dropOver {
+  background-color: var(--pen-soft);
+}
+.drop > svg {
+  flex: none;
+}
+.fileInput:focus-visible + .drop {
+  outline: 2px solid var(--pen);
+  outline-offset: 3px;
+}
+.fileInput:focus-visible + .drop .pick {
+  box-shadow: inset 0 -3px 0 rgb(0 0 0 / 0.22), 0 0 0 2px var(--sheet), 0 0 0 4px var(--pen);
+}
+.pickWrap {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  min-width: 0;
+}
+.pick {
+  min-height: 50px;
+  padding: 0 22px;
+}
+.dropHint {
+  font-size: 15px;
+  color: var(--ink-2);
+}
+.narrow {
+  display: none;
+}
+
+.dropChosen {
+  --c: var(--rule-2);
+  padding: 16px 18px;
+}
+.chosen {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 2px 14px;
+  flex: 1;
+  min-width: 0;
+}
+.fileName {
+  grid-column: 1;
+  /* dua baris: akhir nama (tahun, "belakang", dst.) sering yang membedakan */
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow-wrap: anywhere;
+  font-weight: 650;
+  font-size: 16px;
+  line-height: 1.35;
+  color: var(--ink);
+}
+.fileMeta {
+  grid-column: 1;
+  font-size: 14px;
+  color: var(--ink-2);
+}
+.fileMeta .mono {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.fileWarn {
+  color: var(--ink);
+  font-weight: 600;
+}
+.change {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  background: var(--sheet);
+}
+
+/* ---------- 02: ukuran ---------- */
+.sub {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  margin: 2px 0 10px;
+  font-size: 15px;
+  font-weight: 650;
+  color: var(--ink);
+}
+.subKey {
+  flex: none;
+  font: 600 14px/1 var(--mono);
+  color: var(--muted);
+}
+.subKey + span {
+  flex: 1 1 0;
+  min-width: 10em;
+}
+.subSoft {
+  font-weight: 400;
+  color: var(--ink-2);
+}
+.subHint {
+  flex: none;
+  margin-left: auto;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.3;
+  color: var(--muted);
+}
+.subB {
+  margin-top: 24px;
+}
+.inKb {
+  display: none;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.chip {
+  position: relative;
+  flex: 1 1 76px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 0 12px;
+  border: 1.5px solid var(--rule-2);
+  border-radius: var(--r);
+  background: var(--sheet);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: border-color 0.15s, background-color 0.15s;
+}
+.chip > input[type="radio"],
+.level > input[type="radio"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.chip:hover,
+.level:hover {
+  border-color: var(--ink-2);
+}
+.chip:has(> input:checked),
+.level:has(> input:checked) {
+  border-color: var(--pen);
+  background: var(--pen-soft);
+  box-shadow: inset 0 0 0 1px var(--pen);
+}
+.chip:has(> input:focus-visible),
+.level:has(> input:focus-visible) {
+  outline: 2px solid var(--pen);
+  outline-offset: 2px;
+}
+
+/* titik radio bundar */
+.radio {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border: 1.5px solid var(--ink-2);
+  border-radius: 50%;
+  background: var(--sheet);
+  pointer-events: none;
+}
+input:checked ~ .radio {
+  border-color: var(--pen);
+  background: var(--pen);
+  box-shadow: inset 0 0 0 3.5px var(--sheet);
+}
+
+.chipVal {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  white-space: nowrap;
+  pointer-events: none;
+}
+.unit {
+  margin-left: 4px;
+  font: 400 13px/1 var(--mono);
+  color: var(--ink-2);
+}
+
+.custom {
+  flex: 0 0 auto;
+  justify-content: flex-start;
+  gap: 8px;
+  padding-right: 16px;
+}
+.customHelp {
+  flex: 1 1 160px;
+  align-self: center;
+  padding-left: 4px;
+  font-size: 14px;
+  color: var(--muted);
+}
+.customLabel {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink-2);
+  pointer-events: none;
+}
+/* isian titik-titik: "lainnya …… KB" */
+.kb {
+  position: relative;
+  z-index: 1;
+  width: 4.6em;
+  min-width: 0;
+  height: 44px;
+  padding: 0 2px;
+  border: 0;
+  border-radius: 0;
+  background: linear-gradient(90deg, var(--ink-2) 55%, transparent 0) 0 calc(100% - 9px) / 5px 1.5px repeat-x;
+  font: 700 17px/1 var(--sans);
+  text-align: center;
+  color: var(--ink);
+  outline: 0;
+}
+.kb:focus-visible {
+  outline: 2px solid var(--pen);
+  outline-offset: 0;
+  border-radius: var(--r-sm);
+}
+.kb[aria-invalid] {
+  background-image: linear-gradient(90deg, var(--stamp) 55%, transparent 0);
+}
+.custom .unit {
+  /* "KB" duduk di garis titik-titik, bukan melayang di tengah */
+  align-self: flex-end;
+  margin: 0 0 11px;
+}
+.kbErr {
+  margin-top: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.kbErr::before {
+  content: "↑ ";
+  color: var(--stamp);
+}
+
+/* tingkat: tiga kartu sejajar */
+.levels {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.level {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-areas:
+    "radio meter"
+    "name name"
+    "sub sub";
+  align-items: center;
+  gap: 0 8px;
+  min-height: 48px;
+  padding: 12px 14px 12px;
+  border: 1.5px solid var(--rule-2);
+  border-radius: var(--r);
+  background: var(--sheet);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: border-color 0.15s, background-color 0.15s;
+}
+.level .radio {
+  grid-area: radio;
+}
+.meter {
+  grid-area: meter;
+  justify-self: end;
+  display: flex;
+  gap: 4px;
+  pointer-events: none;
+}
+.meter i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1.5px var(--rule-2);
+}
+.meter i.on {
+  background: var(--ink);
+  box-shadow: none;
+}
+.level:has(> input:checked) .meter i.on {
+  background: var(--pen);
+}
+.levelName {
+  grid-area: name;
+  margin-top: 10px;
+  font-weight: 750;
+  font-size: 16px;
+  line-height: 1.25;
+  color: var(--ink);
+  pointer-events: none;
+}
+.levelSub {
+  grid-area: sub;
+  font-size: 14px;
+  line-height: 1.35;
+  color: var(--ink-2);
+  pointer-events: none;
+}
+
+.handNote {
+  position: absolute;
+  left: calc(66.66% - 44px);
+  bottom: calc(100% + 2px);
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  font-size: 22px;
+  white-space: nowrap;
+  transform: rotate(-3deg);
+  transform-origin: left bottom;
+  pointer-events: none;
+}
+.handNote svg {
+  order: -1;
+  margin-bottom: -10px;
+  transform: scaleX(-1);
+}
+
+/* ---------- 03: saklar hitam-putih ---------- */
+.switch {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+  cursor: pointer;
+}
+.switch > input {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 56px;
+  height: 44px;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.track {
+  position: relative;
+  width: 56px;
+  height: 32px;
+  margin-top: 1px;
+  border: 1.5px solid var(--ink-2);
+  border-radius: var(--r-lg);
+  background: var(--sheet);
+  transition: background-color 0.15s, border-color 0.15s;
+  pointer-events: none;
+}
+.knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 23px;
+  height: 23px;
+  border: 1.5px solid var(--ink-2);
+  border-radius: var(--r);
+  background: var(--sheet);
+  box-shadow: 0 1px 0 rgb(var(--shadow-rgb) / 0.2);
+  transition: transform 0.18s;
+}
+.switch > input:checked + .track {
+  border-color: var(--pen);
+  background: var(--pen);
+}
+.switch > input:checked + .track .knob {
+  transform: translateX(21px);
+  border-color: var(--on-pen);
+  background: var(--on-pen);
+}
+.switch > input:focus-visible + .track {
+  outline: 2px solid var(--pen);
+  outline-offset: 3px;
+}
+.switch > input:disabled ~ * {
+  opacity: 0.6;
+}
+.swText {
+  min-width: 0;
+}
+.swHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 6px;
+  min-height: 34px;
+  font-size: 16px;
+}
+.swHead b {
+  font-weight: 750;
+}
+.swSoft {
+  color: var(--ink-2);
+}
+.swState {
+  margin-left: 4px;
+  padding: 2px 7px 1px;
+  border: 1px solid var(--rule-2);
+  border-radius: var(--r-sm);
+  font: 600 12px/1.3 var(--mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+.switch > input:checked ~ .swText .swState {
+  border-color: var(--pen);
+  color: var(--pen);
+}
+.swDesc {
+  display: block;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+.swWarn {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 6px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.swWarn svg {
+  flex: none;
+  margin-top: 3px;
+}
+
+/* ---------- tombol utama ---------- */
+.act {
+  padding: 8px var(--pad) 30px calc(var(--m) + 20px);
+}
+.go {
+  justify-content: space-between;
+  padding: 0 22px;
+  text-align: left;
+  white-space: normal;
+}
+.go[aria-disabled="true"] {
+  cursor: not-allowed;
+}
+.goTarget {
+  font-weight: 500;
+  font-size: 15px;
+}
+.goTarget::before {
+  content: " · ";
+}
+.lock {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 12px;
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--ink);
+}
+.lock svg {
+  flex: none;
+  margin-top: 2px;
+}
+.spinner {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border: 2.5px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: putar 0.8s linear infinite;
+}
+@keyframes putar {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---------- bilah menempel di HP ---------- */
+.sticky {
+  display: none;
+}
+
+/* ==========================================================================
+   Ukuran
+   ========================================================================== */
+
+@container folder (max-width: 660px) {
+  .subHint {
+    margin-left: 0;
+    flex-basis: 100%;
+  }
+  .handNote {
+    left: auto;
+    right: 0;
+  }
+}
+
+/* sempit: nomor 01/02/03 masuk sebaris dengan judul, margin folio jadi garis tipis di tepi */
+@container folder (max-width: 479px) {
+  .sheet {
+    --m: 0px;
+    --ml: 9px;
+    --pad: 14px;
+  }
+  .field {
+    position: relative;
+    display: block;
+  }
+  .num {
+    position: absolute;
+    left: calc(var(--pad) + 4px);
+    top: 18px;
+    padding: 0;
+    font-size: 13px;
+    line-height: 1.3;
+  }
+  .fbody {
+    padding: 15px var(--pad) 20px calc(var(--pad) + 4px);
+  }
+  .flabel {
+    padding-left: 28px;
+  }
+  .trust {
+    padding: 10px var(--pad) 10px calc(var(--pad) + 4px);
+    font-size: 14px;
+  }
+  .act {
+    padding: 4px var(--pad) 24px calc(var(--pad) + 4px);
+  }
+  .drop {
+    gap: 14px;
+    padding: 16px 14px;
+  }
+  .wide {
+    display: none;
+  }
+  .narrow {
+    display: inline;
+  }
+  .dropHint {
+    font-size: 14px;
+    line-height: 1.35;
+  }
+  .pickWrap {
+    gap: 6px 12px;
+  }
+  .chosen {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .change {
+    grid-column: 1;
+    grid-row: auto;
+    justify-self: start;
+    margin-top: 8px;
+  }
+  /* empat kolom: angka saja (satuan KB disebut di label), 1 MB + "lainnya" di baris kedua */
+  .chips {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px 7px;
+  }
+  .chip {
+    padding: 0 4px;
+    gap: 6px;
+  }
+  .unitKb {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .inKb {
+    display: inline;
+  }
+  .subHint {
+    display: none;
+  }
+  .custom {
+    grid-column: span 3;
+    padding: 0 12px;
+  }
+  .customHelp {
+    display: none;
+  }
+  .drop {
+    padding: 14px 14px;
+  }
+  .drop > svg {
+    width: 34px;
+    height: auto;
+  }
+  .pick {
+    min-height: 48px;
+    padding: 0 18px;
+  }
+  .radio {
+    width: 17px;
+    height: 17px;
+  }
+  /* tingkat jadi tiga baris, keterangannya tetap satu baris */
+  .levels {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+  }
+  .level {
+    grid-template-columns: auto auto auto minmax(0, 1fr);
+    grid-template-areas: "radio name meter sub";
+    gap: 0 10px;
+    padding: 0 12px;
+    min-height: 46px;
+  }
+  .subB {
+    margin-top: 20px;
+  }
+  .levelName {
+    margin-top: 0;
+  }
+  .meter {
+    justify-self: start;
+  }
+  .levelSub {
+    justify-self: end;
+    white-space: nowrap;
+  }
+  .handNote {
+    display: none;
+  }
+  .go {
+    padding: 8px 16px;
+    line-height: 1.25;
+  }
+  .go .goTarget {
+    display: block;
+    font-size: 14px;
+  }
+  .go .goTarget::before {
+    content: none;
+  }
+}
+
+@media (max-width: 599px) {
+  .folder {
+    --lip: 18px;
+    padding: 6px 6px calc(var(--lip) - 6px);
+    margin-top: 28px;
+  }
+  .folder::after {
+    clip-path: polygon(0 6px, 14px 0, calc(100% - 14px) 0, 100% 6px, 100% 100%, 0 100%);
+  }
+  .folder::before {
+    left: 6px;
+    right: 6px;
+  }
+  .folderTab {
+    height: 28px;
+  }
+}
+
+@media (max-width: 899px) {
+  .sticky {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 35;
+    display: block;
+    padding: 10px var(--gutter) calc(10px + env(safe-area-inset-bottom));
+    background: var(--bg);
+    border-top: 1px solid var(--rule-2);
+    box-shadow: 0 -10px 24px -18px rgb(var(--shadow-rgb) / 0.6);
+    transform: translateY(110%);
+    visibility: hidden;
+    transition:
+      transform 0.2s,
+      visibility 0s 0.2s;
+  }
+  .sticky[data-show] {
+    transform: none;
+    visibility: visible;
+    transition: transform 0.2s;
+  }
+  .stickyBtn {
+    min-height: 52px;
+    justify-content: space-between;
+    padding: 0 18px;
+    white-space: normal;
+    text-align: left;
+  }
+}
+
+/* HP sangat kecil (≤ 320 px): tiga kolom, keterangan tingkat turun ke baris kedua */
+@container folder (max-width: 300px) {
+  .chips {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .custom {
+    grid-column: 1 / -1;
+  }
+  .level {
+    grid-template-columns: auto auto minmax(0, 1fr);
+    grid-template-areas:
+      "radio name meter"
+      ". sub sub";
+    padding: 8px 12px 9px;
+  }
+  .meter {
+    justify-self: end;
+  }
+  .levelSub {
+    justify-self: start;
+    white-space: normal;
+    line-height: 1.25;
+  }
+}

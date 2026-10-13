@@ -1,0 +1,114 @@
+.foot {
+  position: relative;
+  margin-top: auto;
+  padding-top: 0;
+  background: var(--kraft);
+  background-image: var(--kraft-grain);
+  color: var(--on-kraft);
+}
+/* tab map, berlabel supaya tidak terlihat seperti potongan rusak */
+.tab {
+  position: absolute;
+  bottom: 100%;
+  left: max(var(--gutter), calc(50% - var(--wrap) / 2));
+  display: flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 16px;
+  background: inherit;
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
+  font: 600 12px/1 var(--mono);
+  letter-spacing: 0.08em;
+  color: var(--on-kraft);
+}
+.inner {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 24px 48px;
+  padding-top: 40px;
+  padding-bottom: 28px;
+}
+.logo {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  color: var(--on-kraft);
+  text-decoration: none;
+}
+.line {
+  max-width: 30em;
+  margin-top: 8px;
+  font-size: 15px;
+  color: var(--on-kraft);
+}
+.ask {
+  margin-top: 6px;
+  font-size: 15px;
+}
+.askLink {
+  display: inline-block;
+  padding: 10px 0;
+  margin: -10px 0;
+  font-weight: 700;
+  color: var(--on-kraft);
+  text-decoration: underline;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+}
+.nav ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.nav a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 10px;
+  font-weight: 650;
+  font-size: 15px;
+  color: var(--on-kraft);
+  text-decoration: none;
+}
+.nav a:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.nav a:focus-visible,
+.logo:focus-visible,
+.askLink:focus-visible {
+  outline-color: var(--on-kraft);
+}
+.bottom {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 24px;
+  padding-top: 16px;
+  border-top: 1px solid color-mix(in srgb, var(--on-kraft) 28%, transparent);
+  font: 400 13px/1.5 var(--mono);
+  color: var(--on-kraft);
+}
+
+@media (max-width: 899px) {
+  .inner {
+    grid-template-columns: minmax(0, 1fr);
+    padding-top: 32px;
+    padding-bottom: 24px;
+  }
+  .nav ul {
+    margin-left: -10px;
+  }
+}
+/* HP: tiga kolom rata, tidak ada "Syarat" yang tertinggal sendirian */
+@media (max-width: 599px) {
+  .nav ul {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0;
+  }
+}

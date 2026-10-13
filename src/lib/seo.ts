@@ -6,6 +6,19 @@ export function absoluteUrl(path: string): string {
   return SITE.url + (path.startsWith("/") ? path : `/${path}`);
 }
 
+/**
+ * Gambar bagikan bawaan (src/app/opengraph-image.tsx). Harus disebut lagi di
+ * tiap halaman: openGraph milik halaman menggantikan milik layout (tidak
+ * digabung), jadi tanpa ini pratinjau WhatsApp/Facebook kehilangan gambarnya.
+ * Halaman ukuran punya opengraph-image sendiri, yang menimpa nilai ini.
+ */
+export const OG_IMAGE = {
+  url: "/opengraph-image",
+  width: 1200,
+  height: 630,
+  alt: "wuspot: kompres PDF sampai ukuran KB yang kamu mau",
+};
+
 export function pageMetadata(opts: {
   path: string;
   title: string;
@@ -26,8 +39,14 @@ export function pageMetadata(opts: {
       url,
       title: opts.title,
       description: opts.description,
+      images: [OG_IMAGE],
     },
-    twitter: { card: "summary_large_image", title: opts.title, description: opts.description },
+    twitter: {
+      card: "summary_large_image",
+      title: opts.title,
+      description: opts.description,
+      images: [OG_IMAGE.url],
+    },
     robots: opts.noindex ? { index: false, follow: true } : undefined,
   };
 }

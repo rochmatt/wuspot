@@ -9,19 +9,26 @@ const GONE_PAGE = `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>Halaman ini sudah tidak ada · wuspot</title>
+<meta name="color-scheme" content="light dark">
+<title>Halaman ini sudah nggak ada · wuspot</title>
 <style>
-  body { font: 16px/1.6 system-ui, sans-serif; margin: 0; padding: 12vh 20px; color: #222; background: #fafaf7; }
+  :root { --bg: #f4efe6; --ink: #1d1a16; --ink2: #4f483d; --dot: #b23526; --pen: #1f3d9e; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #171512; --ink: #eee7da; --ink2: #c7bdab; --dot: #ee7a6b; --pen: #93aaf4; } }
+  body { margin: 0; padding: 12vh 20px; font: 17px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--ink); background: var(--bg); }
   main { max-width: 34rem; margin: 0 auto; }
-  h1 { font-size: 1.4rem; margin: 0 0 .5rem; }
-  a { color: inherit; }
+  .mark { font-weight: 800; font-size: 26px; letter-spacing: -0.04em; }
+  .mark i { display: inline-block; width: .5em; height: .5em; margin: 0 .04em; border-radius: 50%; background: var(--dot); }
+  h1 { margin: 28px 0 8px; font-size: 1.6rem; line-height: 1.2; letter-spacing: -0.02em; }
+  p { margin: 0 0 12px; color: var(--ink2); }
+  a { color: var(--pen); font-weight: 650; text-underline-offset: 3px; }
 </style>
 </head>
 <body>
 <main>
-  <h1>Halaman ini sudah dihapus.</h1>
-  <p>Alamat ini milik wuspot versi lama dan isinya memang sudah tidak ada lagi.</p>
-  <p>wuspot sekarang berisi alat-alat online gratis. <a href="/">Lihat yang ada sekarang &rarr;</a></p>
+  <div class="mark" aria-label="wuspot">wusp<i></i>t</div>
+  <h1>Halaman ini sudah nggak ada.</h1>
+  <p>Alamat ini berasal dari isi lama domain ini, dan isinya memang sudah dihapus.</p>
+  <p>wuspot sekarang berisi alat online gratis buat beresin berkas. <a href="/">Lihat yang ada sekarang &rarr;</a></p>
 </main>
 </body>
 </html>`;

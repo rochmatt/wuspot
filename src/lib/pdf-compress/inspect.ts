@@ -9,9 +9,17 @@ export interface DocInfo {
   textPages: boolean[];
   hasAnyText: boolean;
   title?: string;
+  /** File aslinya terenkripsi (password pembuka atau hanya password pemilik). */
+  encrypted?: boolean;
+  /** Ada tanda tangan digital (mis. e-meterai) yang akan batal bila file diubah. */
+  hasSignatures?: boolean;
 }
 
-export async function inspectDocument(doc: PDFDocumentProxy, signal?: AbortSignal): Promise<DocInfo> {
+export async function inspectDocument(
+  doc: PDFDocumentProxy,
+  signal?: AbortSignal,
+  onPage?: (done: number, total: number) => void,
+): Promise<DocInfo> {
   const pageCount = doc.numPages;
   const textPages: boolean[] = [];
   for (let n = 1; n <= pageCount; n++) {
@@ -22,14 +30,17 @@ export async function inspectDocument(doc: PDFDocumentProxy, signal?: AbortSigna
     } finally {
       page.cleanup();
     }
+    onPage?.(n, pageCount);
   }
   throwIfAborted(signal);
-  const title = await readTitle(doc);
+  const meta = await readMeta(doc);
   return {
     pageCount,
     textPages,
     hasAnyText: textPages.some(Boolean),
-    ...(title ? { title } : {}),
+    ...(meta.title ? { title: meta.title } : {}),
+    encrypted: meta.encrypted,
+    hasSignatures: meta.hasSignatures,
   };
 }
 
@@ -63,18 +74,29 @@ async function pageHasText(page: PDFPageProxy): Promise<boolean> {
   }
 }
 
-async function readTitle(doc: PDFDocumentProxy): Promise<string | undefined> {
+async function readMeta(
+  doc: PDFDocumentProxy,
+): Promise<{ title?: string; encrypted: boolean; hasSignatures: boolean }> {
   try {
     const { info, metadata } = await doc.getMetadata();
-    const fromInfo = (info as Record<string, unknown>)?.Title;
+    const rec = (info ?? {}) as Record<string, unknown>;
     const fromXmp: unknown = metadata?.get("dc:title");
-    for (const candidate of [fromInfo, fromXmp]) {
-      if (typeof candidate === "string" && candidate.trim()) return candidate.trim().slice(0, 300);
+    let title: string | undefined;
+    for (const candidate of [rec.Title, fromXmp]) {
+      if (typeof candidate === "string" && candidate.trim()) {
+        title = candidate.trim().slice(0, 300);
+        break;
+      }
     }
+    return {
+      title,
+      encrypted: typeof rec.EncryptFilterName === "string" && rec.EncryptFilterName !== "",
+      hasSignatures: rec.IsSignaturesPresent === true,
+    };
   } catch {
     // Metadata rusak tidak penting untuk kompresi.
+    return { encrypted: false, hasSignatures: false };
   }
-  return undefined;
 }
 
 function throwIfAborted(signal?: AbortSignal): void {

@@ -70,6 +70,10 @@ const N = {
   Alternate: PDFName.of("Alternate"),
   DCTDecode: PDFName.of("DCTDecode"),
   FlateDecode: PDFName.of("FlateDecode"),
+  LZWDecode: PDFName.of("LZWDecode"),
+  RunLengthDecode: PDFName.of("RunLengthDecode"),
+  ASCII85Decode: PDFName.of("ASCII85Decode"),
+  ASCIIHexDecode: PDFName.of("ASCIIHexDecode"),
   DeviceRGB: PDFName.of("DeviceRGB"),
   DeviceGray: PDFName.of("DeviceGray"),
   ICCBased: PDFName.of("ICCBased"),
@@ -85,13 +89,20 @@ const KEEP_KEYS = ["SMask", "Interpolate", "Intent", "OC", "StructParent", "Name
 // Analisis dict gambar (murni pdf-lib, bisa diuji di node)
 
 export interface ImageInfo {
+  /** "flate" = raster lossless (Flate, juga LZW/RunLength). */
   kind: "jpeg" | "flate";
   width: number;
   height: number;
   /** 1 (abu-abu) atau 3 (RGB). */
   components: 1 | 3;
-  /** Hanya untuk Flate. 1 = tanpa predictor. */
+  /** Hanya untuk raster lossless. 1 = tanpa predictor. */
   predictor: number;
+  /** Filter pembungkus teks (ASCII85/ASCIIHex) sebelum filter gambar, mis. buatan reportlab. */
+  transport?: PDFName[];
+  /** Filter raster lossless; default FlateDecode. */
+  filter?: PDFName;
+  /** DecodeParms filter gambar (untuk EarlyChange LZW). */
+  parms?: PDFDict;
 }
 
 function num(context: PDFContext, obj: PDFObject | undefined): number | undefined {
@@ -106,22 +117,51 @@ function resolve(context: PDFContext, obj: PDFObject | undefined): PDFObject | u
   return v instanceof PDFRef ? undefined : v;
 }
 
-/** Filter tunggal (nama atau array 1 elemen) beserta DecodeParms-nya. */
-function singleFilter(context: PDFContext, dict: PDFDict): { filter: PDFName; parms: PDFDict | undefined } | null {
+interface FilterChain {
+  /** Filter pembungkus teks yang dibuka lebih dulu. */
+  transport: PDFName[];
+  /** Filter gambar (terakhir di rantai). */
+  filter: PDFName;
+  parms: PDFDict | undefined;
+}
+
+/**
+ * Filter gambar beserta DecodeParms-nya. Selain filter tunggal, rantai yang
+ * hanya diawali pembungkus teks (ASCII85/ASCIIHex, dipakai reportlab dan
+ * generator lama) juga diterima, karena pembungkusnya bisa dibuka tanpa rugi.
+ */
+function filterChain(context: PDFContext, dict: PDFDict): FilterChain | null {
   const f = resolve(context, dict.get(N.Filter));
-  let parmsObj = resolve(context, dict.get(N.DecodeParms));
-  let filter: PDFObject | undefined = f;
-  if (f instanceof PDFArray) {
-    if (f.size() !== 1) return null;
-    filter = resolve(context, f.get(0));
-    if (parmsObj instanceof PDFArray) {
-      if (parmsObj.size() > 1) return null;
-      parmsObj = parmsObj.size() === 1 ? resolve(context, parmsObj.get(0)) : undefined;
+  const p = resolve(context, dict.get(N.DecodeParms));
+  let names: Array<PDFObject | undefined>;
+  let parmsList: Array<PDFObject | undefined>;
+  if (f instanceof PDFName) {
+    names = [f];
+    parmsList = [p instanceof PDFArray ? resolve(context, p.get(0)) : p];
+  } else if (f instanceof PDFArray) {
+    names = f.asArray().map((x) => resolve(context, x));
+    if (p instanceof PDFArray) {
+      if (p.size() > names.length) return null;
+      parmsList = names.map((_, i) => (i < p.size() ? resolve(context, p.get(i)) : undefined));
+    } else {
+      // DecodeParms tunggal untuk rantai 1 filter (tidak baku tapi umum).
+      parmsList = names.map((_, i) => (names.length === 1 && i === 0 ? p : undefined));
     }
+  } else {
+    return null;
   }
-  if (!(filter instanceof PDFName)) return null;
-  const parms = parmsObj instanceof PDFDict ? parmsObj : undefined;
-  return { filter, parms };
+  if (names.length < 1 || names.length > 3) return null;
+  const last = names[names.length - 1];
+  if (!(last instanceof PDFName)) return null;
+  const transport: PDFName[] = [];
+  for (let i = 0; i < names.length - 1; i++) {
+    const n = names[i];
+    if (!(n instanceof PDFName) || (n !== N.ASCII85Decode && n !== N.ASCIIHexDecode)) return null;
+    if (parmsList[i] instanceof PDFDict) return null;
+    transport.push(n);
+  }
+  const lastParms = parmsList[names.length - 1];
+  return { transport, filter: last, parms: lastParms instanceof PDFDict ? lastParms : undefined };
 }
 
 /** Jumlah komponen warna yang aman diubah ke DeviceRGB, atau null. */
@@ -166,8 +206,9 @@ export function analyzeImage(context: PDFContext, stream: PDFStream): ImageInfo 
   if (width < MIN_SIDE || height < MIN_SIDE || width * height < MIN_PIXELS) return null;
   if (width * height > MAX_PIXELS) return null;
 
-  const sf = singleFilter(context, dict);
+  const sf = filterChain(context, dict);
   if (!sf) return null;
+  const transport = sf.transport.length > 0 ? { transport: sf.transport } : {};
   const components = colorComponents(context, dict.get(N.ColorSpace));
   if (components === null) return null;
   const bpc = num(context, dict.get(N.BitsPerComponent));
@@ -176,13 +217,15 @@ export function analyzeImage(context: PDFContext, stream: PDFStream): ImageInfo 
     if (bpc !== undefined && bpc !== 8) return null;
     // ColorTransform eksplisit bisa membuat warna salah bila didecode browser.
     if (sf.parms?.has(N.ColorTransform)) return null;
-    return { kind: "jpeg", width, height, components, predictor: 1 };
+    return { kind: "jpeg", width, height, components, predictor: 1, ...transport };
   }
 
-  if (sf.filter === N.FlateDecode) {
+  const lossless = sf.filter === N.FlateDecode || sf.filter === N.LZWDecode || sf.filter === N.RunLengthDecode;
+  if (lossless) {
     if (bpc !== 8) return null;
     let predictor = 1;
-    if (sf.parms) {
+    // RunLength tidak mengenal predictor.
+    if (sf.parms && sf.filter !== N.RunLengthDecode) {
       predictor = num(context, sf.parms.get(N.Predictor)) ?? 1;
       if (predictor > 1) {
         const ok = predictor === 2 || (predictor >= 10 && predictor <= 15);
@@ -192,7 +235,16 @@ export function analyzeImage(context: PDFContext, stream: PDFStream): ImageInfo 
         if (!ok || colors !== components || pbpc !== 8 || columns !== width) return null;
       }
     }
-    return { kind: "flate", width, height, components, predictor };
+    return {
+      kind: "flate",
+      width,
+      height,
+      components,
+      predictor,
+      ...transport,
+      ...(sf.filter !== N.FlateDecode ? { filter: sf.filter } : {}),
+      ...(sf.parms ? { parms: sf.parms } : {}),
+    };
   }
 
   return null;
@@ -264,7 +316,7 @@ export async function encodeImages(
       try {
         const bytes =
           info.kind === "jpeg"
-            ? await reencodeJpeg(stream.contents, info, size, step.quality, grayscale)
+            ? await reencodeJpeg(stripTransport(stream, info), info, size, step.quality, grayscale)
             : await reencodeFlate(stream, info, size, step.quality, grayscale);
         if (bytes && bytes.length < c.streamBytes * KEEP_RATIO) {
           out.push({ refTag: c.refTag, bytes, width: size.width, height: size.height });
@@ -293,7 +345,7 @@ export async function encodeImages(
 }
 
 function throwIfAborted(signal: AbortSignal | undefined): void {
-  if (signal?.aborted) throw new CompressError("aborted", "Proses dibatalkan.");
+  if (signal?.aborted) throw new CompressError("aborted", "Dibatalkan.");
 }
 
 function isOutOfMemory(err: unknown): boolean {
@@ -370,16 +422,40 @@ function contextOf(canvas: AnyCanvas): CanvasRenderingContext2D | OffscreenCanva
   return ctx;
 }
 
-/** Inflate + buang predictor. Hasil: width*height*components byte, atau null bila datanya kurang. */
+/** Dekode `data` dengan satu filter memakai dekoder JS pdf-lib (tanpa predictor). */
+function decodeWithPdfLib(stream: PDFRawStream, filters: PDFName[], parms: PDFDict | undefined, data: Uint8Array) {
+  const ctx = stream.dict.context;
+  const dict = ctx.obj({});
+  dict.set(N.Filter, ctx.obj(filters));
+  if (parms) dict.set(N.DecodeParms, ctx.obj([parms]));
+  return decodePDFRawStream(PDFRawStream.of(dict, data)).decode();
+}
+
+/** Buka pembungkus ASCII85/ASCIIHex; data gambar di baliknya tidak disentuh. */
+export function stripTransport(stream: PDFRawStream, info: ImageInfo): Uint8Array {
+  if (!info.transport?.length) return stream.contents;
+  return decodeWithPdfLib(stream, info.transport, undefined, stream.contents);
+}
+
+/**
+ * Dekode raster lossless (Flate/LZW/RunLength, boleh dibungkus ASCII85) lalu
+ * buang predictor. Hasil: width*height*components byte, atau null bila datanya kurang.
+ */
 export async function decodeFlateRaster(stream: PDFRawStream, info: ImageInfo): Promise<Uint8Array | null> {
+  const encoded = stripTransport(stream, info);
+  const filter = info.filter ?? N.FlateDecode;
   let raw: Uint8Array;
-  try {
-    raw = await inflateBytes(stream.contents);
-  } catch (err) {
-    if (err instanceof RangeError) throw err;
-    // Inflate bawaan browser ketat (sampah di ekor, checksum hilang). Dekoder
-    // JS milik pdf-lib (port pdf.js) lebih toleran, walau lebih lambat.
-    raw = decodePDFRawStream(stream).decode();
+  if (filter === N.FlateDecode) {
+    try {
+      raw = await inflateBytes(encoded);
+    } catch (err) {
+      if (err instanceof RangeError) throw err;
+      // Inflate bawaan browser ketat (sampah di ekor, checksum hilang). Dekoder
+      // JS milik pdf-lib (port pdf.js) lebih toleran, walau lebih lambat.
+      raw = decodeWithPdfLib(stream, [N.FlateDecode], undefined, encoded);
+    }
+  } else {
+    raw = decodeWithPdfLib(stream, [filter], info.parms, encoded);
   }
   if (info.predictor > 1) {
     raw = undoPredictor(raw, {

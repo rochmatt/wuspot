@@ -1,0 +1,47 @@
+.crumb ol {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font: 400 13px/1.3 var(--mono);
+  color: var(--muted);
+}
+.crumb li {
+  display: flex;
+  align-items: center;
+}
+.crumb li + li::before {
+  content: "›";
+  padding: 0 2px;
+  color: var(--muted);
+}
+.crumb a,
+.crumb span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 6px;
+}
+.crumb a {
+  min-width: 44px;
+}
+.crumb li:first-child a {
+  padding-left: 0;
+}
+.crumb a {
+  color: var(--ink-2);
+  text-decoration: underline;
+  text-decoration-color: var(--rule-2);
+  text-underline-offset: 3px;
+}
+.crumb a:hover {
+  color: var(--ink);
+  text-decoration-color: currentColor;
+}
+.crumb [aria-current] {
+  color: var(--ink);
+  font-weight: 600;
+}

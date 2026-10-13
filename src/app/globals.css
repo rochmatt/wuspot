@@ -1,49 +1,358 @@
+/* ==========================================================================
+   wuspot — "map coklat"
+   Kertas HVS, map coklat, tinta pulpen biru (satu-satunya warna aksi),
+   tinta stempel merah (hanya untuk tanda: logo, stempel, "segera", 0 byte).
+   Semua warna teks sudah dicek ≥ 4,5:1 di kedua tema.
+   ========================================================================== */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg: #f4efe6; /* kertas */
+  --sheet: #ffffff; /* lembar formulir, tanda terima */
+  --sheet-2: #faf6ee; /* isian, kotak file */
+  --ink: #1d1a16; /* tinta hitam: teks utama */
+  --ink-2: #4f483d; /* teks kedua (7,9:1 di kertas) */
+  --muted: #665e50; /* keterangan kecil (5,6:1 di kertas, 5:1 di kraft muda) */
+  --rule: #e2d8c6;
+  --rule-2: #cdbfa6;
+  --rule-3: #857868; /* garis tombol tenang: ≥ 3:1 di kertas & lembar */
+  --lines: #dce4f0; /* garis buku tulis */
+  --margin: #e9a79d; /* garis margin folio */
+  --kraft: #c4a072; /* map coklat */
+  --kraft-front: #ceae84; /* sampul depan map, sedikit lebih muda */
+  --kraft-soft: #ede2cd;
+  --kraft-deep: #674a20;
+  --on-kraft: #2a1e0d;
+  --on-kraft-2: #46331a;
+  --pen: #1f3d9e; /* tinta pulpen: aksi */
+  --pen-dk: #172f7e;
+  --pen-soft: #e8edfa;
+  --on-pen: #ffffff;
+  /* tombol utama (Pilih file → Kompres → Unduh): tinta pulpen pekat */
+  --action: #1f3d9e;
+  --action-dk: #172f7e;
+  --on-action: #ffffff;
+  --stamp: #b23526; /* tinta stempel */
+  --stamp-soft: #f6e3dc;
+  --warn-soft: #fbf1d9;
+  --shadow-rgb: 60 40 10;
+  --paper-shadow: 0 1px 0 rgb(var(--shadow-rgb) / 0.14), 0 12px 26px -18px rgb(var(--shadow-rgb) / 0.55);
+  --kraft-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .3 0 0 0 0 .2 0 0 0 0 .05 0 0 0 .5 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23f)' opacity='.55'/%3E%3C/svg%3E");
+  --blend: multiply;
+
+  --sans: var(--font-sans), "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --mono: var(--font-mono), "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --hand: var(--font-hand), "Caveat", "Segoe Print", cursive;
+
+  --r-sm: 3px; /* kertas */
+  --r: 4px; /* tombol, isian */
+  --r-lg: 8px; /* sudut map */
+  --wrap: 1200px;
+  --gutter: 32px;
+  --header-h: 64px;
+
+  color-scheme: light;
 }
 
+/* Tema gelap: mengikuti sistem, kecuali pengguna memilih terang. */
 @media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  :root:not([data-theme="light"]) {
+    /* malam, lampu meja: kertas tetap permukaan paling terang, map di bawahnya */
+    --bg: #171512;
+    --sheet: #322e28;
+    --sheet-2: #2b2722;
+    --ink: #eee7da;
+    --ink-2: #c7bdab;
+    --muted: #aba190;
+    --rule: #4a4238;
+    --rule-2: #5c5448;
+    --rule-3: #857a69;
+    --lines: #3a3f52;
+    --margin: #6e3a33;
+    --kraft: #352a1e;
+    --kraft-front: #3e3226;
+    --kraft-soft: #221d17;
+    --kraft-deep: #ddbe8c;
+    --on-kraft: #f6ebd6;
+    --on-kraft-2: #ebdcc0;
+    --pen: #93aaf4;
+    --pen-dk: #afc0f7;
+    --pen-soft: #262f48;
+    --on-pen: #0e1631;
+    --action: #3a5bd0;
+    --action-dk: #3352c2;
+    --on-action: #ffffff;
+    --stamp: #ee7a6b;
+    --stamp-soft: #3a211c;
+    --warn-soft: #2f2716;
+    --shadow-rgb: 0 0 0;
+    --paper-shadow: inset 0 1px 0 rgb(255 255 255 / 0.07), 0 1px 0 rgb(0 0 0 / 0.35), 0 14px 28px -18px rgb(0 0 0 / 0.9);
+    --kraft-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .45 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23f)' opacity='.5'/%3E%3C/svg%3E");
+    --blend: normal;
+    color-scheme: dark;
   }
 }
+:root[data-theme="dark"] {
+  /* malam, lampu meja: kertas tetap permukaan paling terang, map di bawahnya */
+  --bg: #171512;
+  --sheet: #322e28;
+  --sheet-2: #2b2722;
+  --ink: #eee7da;
+  --ink-2: #c7bdab;
+  --muted: #aba190;
+  --rule: #4a4238;
+  --rule-2: #5c5448;
+  --rule-3: #857a69;
+  --lines: #3a3f52;
+  --margin: #6e3a33;
+  --kraft: #352a1e;
+  --kraft-front: #3e3226;
+  --kraft-soft: #221d17;
+  --kraft-deep: #ddbe8c;
+  --on-kraft: #f6ebd6;
+  --on-kraft-2: #ebdcc0;
+  --pen: #93aaf4;
+  --pen-dk: #afc0f7;
+  --pen-soft: #262f48;
+  --on-pen: #0e1631;
+  --action: #3a5bd0;
+  --action-dk: #3352c2;
+  --on-action: #ffffff;
+  --stamp: #ee7a6b;
+  --stamp-soft: #3a211c;
+  --warn-soft: #2f2716;
+  --shadow-rgb: 0 0 0;
+  --paper-shadow: inset 0 1px 0 rgb(255 255 255 / 0.07), 0 1px 0 rgb(0 0 0 / 0.35), 0 14px 28px -18px rgb(0 0 0 / 0.9);
+  --kraft-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .45 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23f)' opacity='.5'/%3E%3C/svg%3E");
+  --blend: normal;
+  color-scheme: dark;
+}
 
+/* ---------- dasar ---------- */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
 html {
-  height: 100%;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  scroll-padding-top: calc(var(--header-h) + 16px);
 }
-
-html,
 body {
-  max-width: 100vw;
-  overflow-x: hidden;
-}
-
-body {
-  min-height: 100%;
+  margin: 0;
+  min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  font: 400 16px/1.6 var(--sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
-
-* {
-  box-sizing: border-box;
-  padding: 0;
+h1,
+h2,
+h3,
+h4,
+p,
+ul,
+ol,
+dl,
+dd,
+figure,
+blockquote {
   margin: 0;
 }
-
+h1,
+h2,
+h3,
+h4 {
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+p {
+  text-wrap: pretty;
+}
 a {
   color: inherit;
-  text-decoration: none;
+}
+img,
+svg {
+  display: block;
+  max-width: 100%;
+}
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+button {
+  cursor: pointer;
+}
+::selection {
+  background: var(--pen-soft);
+  color: var(--ink);
+}
+:focus-visible {
+  outline: 2px solid var(--pen);
+  outline-offset: 2px;
 }
 
-@media (prefers-color-scheme: dark) {
-  html {
-    color-scheme: dark;
+/* ---------- bantuan ---------- */
+.sr-only {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+.wrap {
+  width: 100%;
+  max-width: calc(var(--wrap) + var(--gutter) * 2);
+  margin-inline: auto;
+  padding-inline: var(--gutter);
+}
+.mono {
+  font-family: var(--mono);
+}
+/* tanda baca di judul besar: rapatkan ke huruf sebelumnya (lihat kern.tsx) */
+.kp {
+  margin-left: -0.08em;
+}
+.kq {
+  margin-left: -0.03em;
+}
+/* jangan dipenggal di tengah, mis. "di-upload" */
+.nw {
+  white-space: nowrap;
+}
+.hand {
+  font-family: var(--hand);
+  font-weight: 600;
+  color: var(--pen);
+  line-height: 1;
+}
+.skip {
+  position: absolute;
+  left: 12px;
+  top: -100px;
+  z-index: 100;
+  padding: 12px 16px;
+  background: var(--action);
+  color: var(--on-action);
+  border-radius: var(--r);
+  font-weight: 700;
+  text-decoration: none;
+}
+.skip:focus {
+  top: 12px;
+}
+
+/* ---------- tombol (dipakai di semua halaman) ---------- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 0 20px;
+  border: 1.5px solid transparent;
+  border-radius: var(--r);
+  font: 700 16px/1.2 var(--sans);
+  letter-spacing: -0.005em;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+}
+.btn svg {
+  flex: none;
+}
+.btn-primary {
+  background: var(--action);
+  color: var(--on-action);
+  box-shadow: inset 0 -3px 0 rgb(0 0 0 / 0.22);
+}
+.btn-primary:hover {
+  background: var(--action-dk);
+}
+.btn-secondary {
+  background: var(--sheet);
+  border-color: var(--ink-2);
+  color: var(--ink);
+}
+.btn-secondary:hover {
+  border-color: var(--ink);
+  background: var(--sheet-2);
+}
+.btn-quiet {
+  min-height: 44px;
+  padding: 0 14px;
+  background: transparent;
+  border-color: var(--rule-3);
+  color: var(--ink);
+  font-weight: 650;
+  font-size: 15px;
+}
+.btn-quiet:hover {
+  border-color: var(--ink);
+}
+.btn-lg {
+  min-height: 56px;
+  font-size: 17px;
+}
+.btn-block {
+  display: flex;
+  width: 100%;
+}
+
+/* tautan teks bergaya pulpen */
+.pen-link {
+  color: var(--pen);
+  font-weight: 650;
+  text-decoration: underline;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+}
+.pen-link:hover {
+  text-decoration-thickness: 2.5px;
+}
+
+@media (max-width: 899px) {
+  :root {
+    --gutter: 24px;
+    --header-h: 56px;
+  }
+  /* bilah "Kompres sekarang" sedang tampil: jangan sampai menutupi fokus atau kaki halaman */
+  html[data-sticky-bar] {
+    scroll-padding-bottom: calc(84px + env(safe-area-inset-bottom));
+  }
+  html[data-sticky-bar] body {
+    padding-bottom: calc(74px + env(safe-area-inset-bottom));
+  }
+}
+@media (max-width: 599px) {
+  :root {
+    --gutter: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
   }
 }

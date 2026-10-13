@@ -28,6 +28,10 @@ interface FixtureInfo {
   /** Kata yang pasti ada di teks PDF (null = PDF tanpa teks / hasil scan). */
   word: string | null;
   password?: string;
+  /** Terenkripsi tanpa password pembuka (hanya pembatasan salin/edit). */
+  protected?: boolean;
+  /** Punya tanda tangan digital yang batal bila file diubah. */
+  signed?: boolean;
 }
 
 const FIXTURES: Record<string, FixtureInfo> = {
@@ -38,7 +42,21 @@ const FIXTURES: Record<string, FixtureInfo> = {
   "rotated.pdf": { pages: 2, word: "lanskap" },
   "tiny.pdf": { pages: 1, word: "wuspot" },
   "encrypted.pdf": { pages: 3, word: "Laporan", password: "rahasia" },
+  "protected.pdf": { pages: 3, word: "Laporan", protected: true },
+  "signed.pdf": { pages: 3, word: "Laporan", signed: true },
+  "legacy.pdf": { pages: 3, word: "Laporan" },
 };
+
+/** Fixture yang diuji di semua mode. Sisanya hanya di kasus tertentu (lihat CASES). */
+const FULL_MATRIX = [
+  "scan-3p.pdf",
+  "text-12p.pdf",
+  "mixed.pdf",
+  "png-flate.pdf",
+  "rotated.pdf",
+  "tiny.pdf",
+  "encrypted.pdf",
+];
 
 const MODES: CompressMode[] = [
   { kind: "target", targetBytes: 100 * KB },
@@ -54,10 +72,22 @@ interface Case {
   fixture: string;
   mode: CompressMode;
   grayscale: boolean;
+  /** Strategi yang wajib dipakai (bila ditentukan). */
+  strategy?: string;
 }
 
 const CASES: Case[] = [
-  ...Object.keys(FIXTURES).flatMap((fixture) => MODES.map((mode) => ({ fixture, mode, grayscale: false }))),
+  ...FULL_MATRIX.flatMap((fixture) => MODES.map((mode) => ({ fixture, mode, grayscale: false }))),
+  { fixture: "protected.pdf", mode: { kind: "target", targetBytes: 200 * KB }, grayscale: false },
+  { fixture: "protected.pdf", mode: { kind: "level", level: "ringan" }, grayscale: false },
+  { fixture: "protected.pdf", mode: { kind: "level", level: "kuat" }, grayscale: false },
+  { fixture: "signed.pdf", mode: { kind: "target", targetBytes: 500 * KB }, grayscale: false },
+  { fixture: "signed.pdf", mode: { kind: "level", level: "sedang" }, grayscale: false },
+  // Gambar terbungkus ASCII85 (reportlab dkk.) harus bisa dikompres tanpa mengorbankan teks.
+  { fixture: "legacy.pdf", mode: { kind: "target", targetBytes: 200 * KB }, grayscale: false, strategy: "images" },
+  { fixture: "legacy.pdf", mode: { kind: "level", level: "sedang" }, grayscale: false, strategy: "images" },
+  // PDF terkunci yang sudah dibuka dengan password: teks tetap teks.
+  { fixture: "encrypted.pdf", mode: { kind: "level", level: "ringan" }, grayscale: true, strategy: "images" },
   { fixture: "scan-3p.pdf", mode: { kind: "target", targetBytes: 200 * KB }, grayscale: true },
   { fixture: "scan-3p.pdf", mode: { kind: "level", level: "sedang" }, grayscale: true },
   { fixture: "scan-3p.pdf", mode: { kind: "level", level: "kuat" }, grayscale: true },
@@ -391,6 +421,8 @@ test.describe("mesin kompres", () => {
         prev = p.ratio;
       }
 
+      if (c.strategy) expect(result.strategy, "strategi yang diharapkan").toBe(c.strategy);
+
       // --- Strategi vs teks ---
       if (result.strategy === "original") {
         expect(Buffer.compare(Buffer.from(bytes), Buffer.from(input)), "strategi original = byte asli").toBe(0);
@@ -405,12 +437,20 @@ test.describe("mesin kompres", () => {
 
       // --- Validasi independen ---
       // Hasil 'original' dari PDF terkunci tetap terkunci; selain itu password harus sudah hilang.
-      const outPassword = result.strategy === "original" ? info.password : undefined;
-      if (info.password && result.strategy !== "original") {
-        expect(result.notes.length, "PDF terkunci: beri tahu bahwa password dihapus").toBeGreaterThan(0);
+      const keptOriginal = result.strategy === "original";
+      const outPassword = keptOriginal ? info.password : undefined;
+      const outEncrypted = keptOriginal && (!!info.password || !!info.protected);
+      if ((info.password || info.protected) && !keptOriginal) {
+        expect(result.notes.length, "PDF terkunci: beri tahu bahwa proteksinya hilang").toBeGreaterThan(0);
+      }
+      if (info.signed && !keptOriginal) {
+        expect(
+          result.notes.some((n) => /tanda tangan/i.test(n)),
+          "PDF bertanda tangan: beri tahu bahwa tanda tangannya batal",
+        ).toBe(true);
       }
 
-      const doc = await PDFDocument.load(bytes, { ignoreEncryption: !!outPassword, updateMetadata: false });
+      const doc = await PDFDocument.load(bytes, { ignoreEncryption: outEncrypted, updateMetadata: false });
       expect(doc.getPageCount()).toBe(info.pages);
 
       const outInfo = await pdfinfo(outFile, outPassword);

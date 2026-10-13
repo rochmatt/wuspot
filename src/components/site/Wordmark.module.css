@@ -1,0 +1,21 @@
+.mark {
+  display: inline-flex;
+  align-items: baseline;
+  font: 800 25px/1 var(--sans);
+  letter-spacing: -0.04em;
+  color: inherit;
+  white-space: nowrap;
+}
+.lg {
+  font-size: 30px;
+}
+/* titik tinta: sedikit tidak bulat sempurna, seperti cap */
+.dot {
+  display: inline-block;
+  width: 0.5em;
+  height: 0.5em;
+  margin: 0 0.035em 0 0.045em;
+  border-radius: 52% 48% 50% 50% / 50% 54% 46% 50%;
+  background: var(--stamp);
+  transform: translateY(0.015em);
+}

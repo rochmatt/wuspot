@@ -1,0 +1,111 @@
+/* ---------- layar lebar: di dalam kepala halaman ---------- */
+.bar {
+  align-self: stretch;
+  display: flex;
+}
+.barList {
+  display: flex;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.barList li {
+  display: flex;
+}
+.barList a {
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 0 13px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink-2);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.barList a:hover {
+  color: var(--ink);
+}
+.barList a[aria-current] {
+  color: var(--ink);
+  font-weight: 750;
+}
+/* tab map coklat kecil menempel di garis bawah kepala halaman */
+.barList a[aria-current]::after {
+  content: "";
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  bottom: -1px;
+  height: 7px;
+  background: var(--kraft);
+  clip-path: polygon(10% 0, 90% 0, 100% 100%, 0 100%);
+}
+
+/* ---------- HP/tablet: baris tab map yang bisa digeser ---------- */
+.tabsNav {
+  display: none;
+}
+
+@media (max-width: 899px) {
+  .bar {
+    display: none;
+  }
+  .tabsNav {
+    position: relative;
+    display: block;
+    border-bottom: 1px solid var(--rule);
+    background: var(--bg);
+  }
+  /* bayangan tepi kanan: tanda masih bisa digeser */
+  .tabsNav::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 1px;
+    width: 36px;
+    background: linear-gradient(90deg, transparent, var(--bg) 85%);
+    pointer-events: none;
+  }
+  .tabList {
+    display: flex;
+    gap: 2px;
+    margin: 0;
+    padding: 6px var(--gutter) 0;
+    list-style: none;
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+    scroll-padding-inline: var(--gutter);
+    scrollbar-width: none;
+    overscroll-behavior-x: contain;
+  }
+  .tabList::-webkit-scrollbar {
+    display: none;
+  }
+  .tabList li {
+    flex: none;
+    scroll-snap-align: start;
+  }
+  .tabList li:last-child {
+    padding-right: 28px;
+  }
+  .tabList a {
+    display: flex;
+    align-items: center;
+    height: 44px;
+    padding: 0 14px;
+    border-radius: var(--r-lg) var(--r-lg) 0 0;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--ink-2);
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  .tabList a[aria-current] {
+    background: var(--kraft);
+    background-image: var(--kraft-grain);
+    color: var(--on-kraft);
+    font-weight: 750;
+  }
+}

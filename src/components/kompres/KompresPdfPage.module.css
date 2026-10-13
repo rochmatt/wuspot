@@ -1,0 +1,359 @@
+/* Rangka halaman alat (≥1060px): kepala selebar halaman, lalu kolom utama +
+   kolom samping yang mulai tepat di tab map, lalu iklan konten di barisnya
+   sendiri (kolom samping, termasuk iklan menempelnya, berhenti sebelum itu). */
+.page {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  grid-template-areas:
+    "head head"
+    "main side"
+    "ad   .";
+  gap: 0 48px;
+  align-items: start;
+  padding: 12px 0 72px;
+}
+.head {
+  grid-area: head;
+  min-width: 0;
+  padding-bottom: 46px;
+}
+.main {
+  grid-area: main;
+  min-width: 0;
+}
+.side {
+  grid-area: side;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  align-self: stretch; /* setinggi kolom utama, supaya iklan bisa menempel */
+}
+.stick {
+  position: sticky;
+  top: calc(var(--header-h) + 20px);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* ---------- kepala: stempel bundar menempel di samping judul & pembuka ---------- */
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 640px) auto;
+  grid-template-rows: auto auto;
+  column-gap: 40px;
+  justify-content: start;
+  align-items: start;
+  padding-top: 6px;
+}
+.hero > .h1,
+.hero > .lede {
+  grid-column: 1;
+}
+.stamp {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+  width: 128px;
+  height: 128px;
+  transform: rotate(-11deg);
+}
+.h1 {
+  font-size: 52px;
+  font-weight: 800;
+  line-height: 1.04;
+  letter-spacing: -0.025em;
+}
+.lede {
+  max-width: 34em;
+  margin-top: 14px;
+  font-size: 18px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+.lede b {
+  color: var(--ink);
+  font-weight: 700;
+}
+.tool {
+  margin-top: 0;
+}
+
+/* ---------- isi ---------- */
+.block {
+  margin-top: 64px;
+}
+.h2 {
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  line-height: 1.15;
+}
+/* "Petunjuk pengisian" + keterangan biasa di bawahnya */
+.h2Sub {
+  display: block;
+  margin-top: 6px;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  line-height: 1.35;
+  color: var(--ink-2);
+}
+.h3 {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+}
+.intro p {
+  max-width: 38em;
+  margin-top: 14px;
+  font-size: 17px;
+  color: var(--ink-2);
+}
+.intro p:first-of-type {
+  margin-top: 16px;
+}
+
+/* petunjuk pengisian: nomor di margin folio, seperti formulirnya */
+.steps {
+  margin: 22px 0 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1.5px solid var(--ink-2);
+}
+.steps li {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  border-bottom: 1px solid var(--lines);
+  background-image:
+    linear-gradient(var(--margin), var(--margin)), linear-gradient(var(--margin), var(--margin));
+  background-size:
+    1px 100%,
+    1px 100%;
+  background-position:
+    59px 0,
+    63px 0;
+  background-repeat: no-repeat;
+}
+.stepNum {
+  padding: 18px 16px 0 0;
+  text-align: right;
+  font: 600 15px/1.2 var(--mono);
+  color: var(--kraft-deep);
+}
+.steps li > div {
+  padding: 16px 0 18px 22px;
+}
+.steps h3 {
+  font-size: 17px;
+  font-weight: 750;
+  letter-spacing: -0.01em;
+}
+.steps p {
+  max-width: 38em;
+  margin-top: 4px;
+  font-size: 16px;
+  color: var(--ink-2);
+}
+
+/* catatan: kertas bergaris */
+.notes {
+  margin-top: 48px;
+  padding: 22px 24px 18px;
+  border-radius: var(--r-sm);
+  background-color: var(--kraft-soft);
+}
+.notes ul {
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.notes li {
+  position: relative;
+  padding: 8px 0 8px 26px;
+  border-top: 1px solid color-mix(in srgb, var(--kraft-deep) 18%, transparent);
+  font-size: 16px;
+  line-height: 1.55;
+  color: var(--ink);
+}
+.notes li::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 0.95em;
+  width: 13px;
+  height: 9px;
+  background: var(--pen);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 22'%3E%3Cpath d='M3 12c3 2 5 4 6.5 8C13 11 19 5 27 2' fill='none' stroke='%23000' stroke-width='3.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+    no-repeat center / contain;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 22'%3E%3Cpath d='M3 12c3 2 5 4 6.5 8C13 11 19 5 27 2' fill='none' stroke='%23000' stroke-width='3.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+    no-repeat center / contain;
+}
+
+.adInline {
+  grid-area: ad;
+  margin-top: 56px;
+}
+
+/* ---------- tanya jawab + alat lain ---------- */
+.faq {
+  display: grid;
+  grid-template-columns: minmax(0, 4fr) minmax(0, 8fr);
+  gap: 48px;
+  padding: 80px 0 64px;
+}
+.faqHead p {
+  margin-top: 12px;
+  font-size: 16px;
+  color: var(--ink-2);
+}
+/* satu garis saja: garis terakhir daftar tanya-jawab sudah menutup bagian itu */
+.more {
+  padding: 0 0 96px;
+}
+.moreHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 8px 24px;
+  margin-bottom: 14px;
+}
+.moreHead p {
+  margin-top: 6px;
+  font-size: 16px;
+  color: var(--ink-2);
+}
+.moreHead :global(.pen-link) {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}
+
+/* ---------- di bawah 1060px: kolom samping dilipat ke alur halaman ---------- */
+@media (max-width: 1059px) {
+  .page {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    max-width: 760px;
+    margin: 0 auto;
+  }
+  .head {
+    padding-bottom: 46px;
+  }
+  .main,
+  .side {
+    display: contents;
+  }
+  .patokan {
+    order: 1;
+    margin-top: 28px;
+  }
+  .block,
+  .adInline {
+    order: 2;
+  }
+  .ukuran,
+  .kabar {
+    order: 3;
+    margin-top: 28px;
+  }
+  .ukuran {
+    margin-top: 56px;
+  }
+  .stick {
+    display: contents;
+  }
+  /* tidak ada iklan menempel di HP/tablet */
+  .adSide {
+    display: none;
+  }
+  .faq {
+    max-width: 760px;
+    margin: 0 auto;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
+  }
+  .more {
+    max-width: 760px;
+    margin: 0 auto;
+  }
+}
+
+@media (max-width: 899px) {
+  .hero {
+    display: block;
+  }
+  .stamp {
+    float: right;
+    width: 92px;
+    height: 92px;
+    margin: 0 -4px 4px 12px;
+    shape-outside: circle(50%);
+  }
+  .h1 {
+    font-size: 40px;
+  }
+  .lede {
+    font-size: 17px;
+  }
+}
+
+@media (max-width: 599px) {
+  .page {
+    padding-top: 4px;
+    padding-bottom: 56px;
+  }
+  .hero {
+    padding-top: 0;
+  }
+  .stamp {
+    width: 74px;
+    height: 74px;
+    margin: 2px -2px 2px 10px;
+  }
+  .h1 {
+    font-size: 32px;
+    line-height: 1.08;
+  }
+  .lede {
+    margin-top: 10px;
+    font-size: 16px;
+  }
+  .head {
+    padding-bottom: 18px;
+  }
+  .block {
+    margin-top: 52px;
+  }
+  .h2 {
+    font-size: 26px;
+  }
+  .intro p {
+    font-size: 16px;
+  }
+  .steps li {
+    grid-template-columns: 40px minmax(0, 1fr);
+    background-position:
+      35px 0,
+      39px 0;
+  }
+  .stepNum {
+    padding: 18px 10px 0 0;
+    font-size: 14px;
+  }
+  .steps li > div {
+    padding-left: 14px;
+  }
+  .notes {
+    margin-top: 40px;
+    padding: 18px 16px 12px;
+  }
+  .faq {
+    padding: 56px 0 48px;
+  }
+  .more {
+    padding: 0 0 72px;
+  }
+}

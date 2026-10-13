@@ -16,28 +16,47 @@ export interface RasterStep {
   quality: number;
 }
 
+// Tangga di bawah diukur di Chromium pada scan A4 300 dpi dan PDF campuran
+// (teks + foto): ukuran nyata vs SSIM (render 150 dpi) untuk kisi
+// sisi/dpi x kualitas. Untuk ukuran yang sama, resolusi lebih tinggi dengan
+// kualitas ~0,3 selalu lebih tajam (terutama huruf) daripada resolusi rendah
+// dengan kualitas tinggi, jadi bagian bawah tangga menahan kualitas di 0,3
+// dan menurunkan resolusinya. Tiap langkah ~10-20% lebih kecil dari
+// sebelumnya, supaya target terpakai sebaik mungkin.
+
 export const IMAGE_LADDER: ImageStep[] = [
   { maxSide: 2400, quality: 0.82 },
-  { maxSide: 2000, quality: 0.75 },
-  { maxSide: 1800, quality: 0.68 },
-  { maxSide: 1600, quality: 0.62 },
-  { maxSide: 1400, quality: 0.56 },
-  { maxSide: 1200, quality: 0.5 },
-  { maxSide: 1000, quality: 0.45 },
-  { maxSide: 850, quality: 0.4 },
-  { maxSide: 700, quality: 0.35 },
+  { maxSide: 2400, quality: 0.72 },
+  { maxSide: 2200, quality: 0.68 },
+  { maxSide: 2000, quality: 0.62 },
+  { maxSide: 1800, quality: 0.55 },
+  { maxSide: 1600, quality: 0.48 },
+  { maxSide: 1500, quality: 0.42 },
+  { maxSide: 1400, quality: 0.36 },
+  { maxSide: 1300, quality: 0.33 },
+  { maxSide: 1200, quality: 0.3 },
+  { maxSide: 1100, quality: 0.3 },
+  { maxSide: 1000, quality: 0.3 },
+  { maxSide: 900, quality: 0.3 },
+  { maxSide: 800, quality: 0.3 },
+  { maxSide: 700, quality: 0.3 },
+  { maxSide: 600, quality: 0.3 },
 ];
 
 export const RASTER_LADDER: RasterStep[] = [
   { dpi: 150, quality: 0.8 },
-  { dpi: 150, quality: 0.7 },
-  { dpi: 130, quality: 0.65 },
-  { dpi: 110, quality: 0.6 },
-  { dpi: 100, quality: 0.55 },
-  { dpi: 90, quality: 0.5 },
-  { dpi: 80, quality: 0.45 },
-  { dpi: 72, quality: 0.4 },
-  { dpi: 60, quality: 0.35 },
+  { dpi: 150, quality: 0.65 },
+  { dpi: 150, quality: 0.5 },
+  { dpi: 150, quality: 0.4 },
+  { dpi: 135, quality: 0.35 },
+  { dpi: 120, quality: 0.32 },
+  { dpi: 110, quality: 0.3 },
+  { dpi: 100, quality: 0.3 },
+  { dpi: 90, quality: 0.3 },
+  { dpi: 80, quality: 0.3 },
+  { dpi: 72, quality: 0.3 },
+  { dpi: 66, quality: 0.3 },
+  { dpi: 60, quality: 0.3 },
   { dpi: 50, quality: 0.3 },
 ];
 
@@ -54,8 +73,8 @@ export interface LevelPreset {
 
 export const LEVEL_PRESETS: Record<CompressLevel, LevelPreset> = {
   ringan: { image: { maxSide: 2400, quality: 0.82 }, raster: null, rasterizeWithText: false },
-  sedang: { image: { maxSide: 1600, quality: 0.62 }, raster: { dpi: 120, quality: 0.62 }, rasterizeWithText: false },
-  kuat: { image: { maxSide: 1000, quality: 0.45 }, raster: { dpi: 90, quality: 0.5 }, rasterizeWithText: true },
+  sedang: { image: { maxSide: 1600, quality: 0.55 }, raster: { dpi: 150, quality: 0.4 }, rasterizeWithText: false },
+  kuat: { image: { maxSide: 1100, quality: 0.3 }, raster: { dpi: 100, quality: 0.3 }, rasterizeWithText: true },
 };
 
 /** Dpi tertinggi di tangga raster; master halaman cukup dirender sekali di dpi ini. */

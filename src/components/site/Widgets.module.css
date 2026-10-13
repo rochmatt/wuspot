@@ -1,0 +1,162 @@
+/* kartu indeks */
+.card {
+  position: relative;
+  padding: 18px 20px 20px;
+  background: var(--sheet);
+  border-radius: var(--r-sm);
+  box-shadow: var(--paper-shadow);
+}
+.title {
+  padding-bottom: 10px;
+  margin-bottom: 12px;
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  /* garis merah tipis khas kartu indeks */
+  border-bottom: 1px solid var(--margin);
+}
+.lead {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+
+/* garis titik-titik */
+.leaders {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.leaders li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--lines);
+  font-size: 15px;
+}
+.leaders li::after {
+  content: "";
+  order: 1;
+  flex: 1;
+  min-width: 12px;
+  border-bottom: 1.5px dotted var(--rule-2);
+  transform: translateY(-4px);
+}
+.leaders b {
+  order: 2;
+  font: 600 14px/1 var(--mono);
+  color: var(--ink);
+}
+/* catatan pensil di bawah daftar, tanpa kotak */
+.tip {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+.pencil {
+  flex: none;
+  font-size: 16px;
+  line-height: 1.35;
+  color: var(--pen);
+}
+.tip b {
+  color: var(--ink);
+}
+
+/* catatan kabar: garis waktu bertitik, tanggal di atas isi */
+.log {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.log li {
+  position: relative;
+  padding: 0 0 14px 20px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+.log li:last-child {
+  padding-bottom: 2px;
+}
+/* titik */
+.log li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 6px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--sheet);
+  box-shadow: inset 0 0 0 1.5px var(--rule-2);
+}
+/* garis putus-putus penghubung */
+.log li::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 20px;
+  bottom: 2px;
+  border-left: 1.5px dotted var(--rule-2);
+}
+.log li:last-child::after {
+  display: none;
+}
+.log li.done::before {
+  background: var(--ink);
+  box-shadow: none;
+}
+.when {
+  display: block;
+  font: 400 13px/1.5 var(--mono);
+  color: var(--muted);
+}
+.done .when {
+  color: var(--ink);
+  font-weight: 600;
+}
+.what {
+  display: block;
+}
+.what b {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+/* tab ukuran: kisi rata (2 kolom di samping, 3–6 di alur halaman), tanpa yatim */
+.sizes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  gap: 8px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.sizes a {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 10px;
+  border: 1.5px solid var(--rule-2);
+  border-radius: var(--r-lg) var(--r-lg) var(--r-sm) var(--r-sm);
+  background: var(--sheet-2);
+  font: 600 15px/1 var(--sans);
+  color: var(--ink);
+  text-decoration: none;
+}
+.sizes a:hover {
+  border-color: var(--ink-2);
+}
+.sizes a[aria-current] {
+  background: var(--kraft);
+  background-image: var(--kraft-grain);
+  border-color: var(--kraft);
+  color: var(--on-kraft);
+}

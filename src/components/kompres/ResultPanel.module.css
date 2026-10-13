@@ -1,0 +1,675 @@
+/* ==========================================================================
+   Tanda terima (hasil)
+   ========================================================================== */
+
+.hasil {
+  container: hasil / inline-size;
+  margin-top: 36px;
+  scroll-margin-top: calc(var(--header-h) + 12px);
+}
+
+.previewLabel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 14px;
+  margin-bottom: 12px;
+  padding-right: 64px; /* jangan bertabrakan dengan penjepit kertas */
+}
+.kicker {
+  font: 600 13px/1 var(--mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.handNote {
+  font-size: 22px;
+  transform: rotate(-2deg);
+}
+/* di HP catatan tangan disembunyikan: hemat ±50 KB huruf Caveat */
+@media (max-width: 599px) {
+  .handNote {
+    display: none;
+  }
+}
+
+.receipt {
+  position: relative;
+  padding: 0 24px 22px;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-sm);
+  background: var(--sheet);
+  box-shadow: var(--paper-shadow);
+}
+.clip {
+  position: absolute;
+  top: -22px;
+  right: 30px;
+  z-index: 1;
+}
+.head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  min-height: 42px;
+  margin: 0 -24px;
+  padding: 0 64px 0 24px;
+  border-bottom: 1.5px dashed var(--rule-2);
+  font: 600 12px/1.2 var(--mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* ---------- isi tanda terima ---------- */
+.grid {
+  display: block;
+}
+.colA {
+  position: relative;
+  min-width: 0;
+}
+.colB {
+  min-width: 0;
+}
+.file {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 0 14px;
+  border-bottom: 1px solid var(--rule);
+}
+.file > svg {
+  flex: none;
+}
+.file > div {
+  min-width: 0;
+}
+.fileName {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow-wrap: anywhere;
+  font-weight: 650;
+  font-size: 15px;
+  line-height: 1.35;
+  color: var(--ink);
+}
+.fileMeta {
+  font: 400 13px/1.5 var(--mono);
+  color: var(--muted);
+}
+
+.sizes {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  padding: 18px 120px 2px 0;
+}
+.sizes > svg {
+  flex: none;
+  margin-bottom: 9px;
+  color: var(--muted);
+}
+.lbl {
+  display: block;
+  margin-bottom: 8px;
+  font: 600 12px/1 var(--mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.was .v {
+  position: relative;
+  display: inline-block;
+  font-size: 22px;
+  font-weight: 650;
+  color: var(--muted);
+  white-space: nowrap;
+}
+/* coretan pulpen yang agak goyang */
+.was .v::after {
+  content: "";
+  position: absolute;
+  left: -4px;
+  right: -4px;
+  top: 42%;
+  height: 9px;
+  background: var(--pen);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 8' preserveAspectRatio='none'%3E%3Cpath d='M1 5c14-3 30-1 44-2s22 1 34-2' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E")
+    no-repeat center / 100% 100%;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 8' preserveAspectRatio='none'%3E%3Cpath d='M1 5c14-3 30-1 44-2s22 1 34-2' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E")
+    no-repeat center / 100% 100%;
+}
+.now .v {
+  display: inline-block;
+  font-size: 54px;
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 0.9;
+  white-space: nowrap;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.now .v small {
+  margin-left: 3px;
+  font-size: 0.42em;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+.stamp {
+  position: absolute;
+  right: 4px;
+  top: 74px;
+}
+
+/* penggaris: 0 → ukuran asli, dengan penanda target */
+.ruler {
+  position: relative;
+  margin: 30px 0 6px;
+}
+.rulerBar {
+  position: relative;
+  height: 14px;
+  border-radius: var(--r-sm);
+  background-color: var(--kraft-soft);
+  background-image: repeating-linear-gradient(90deg, var(--rule-2) 0 1px, transparent 1px 10%);
+}
+.rulerFill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: var(--r-sm);
+  background: var(--pen);
+}
+.rulerTgt {
+  position: absolute;
+  top: -7px;
+  bottom: -5px;
+  width: 2px;
+  margin-left: -1px;
+}
+.rulerTgt::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--stamp);
+}
+.rulerTgt span {
+  position: absolute;
+  bottom: calc(100% + 2px);
+  left: -2px;
+  font: 600 12px/1.3 var(--mono);
+  color: var(--stamp);
+  white-space: nowrap;
+}
+.rulerTgtR span {
+  left: auto;
+  right: -2px;
+}
+/* ukuran asli di luar skala: penggaris "dipotong" di ujung kanan */
+.rulerBroken .rulerBar::after {
+  content: "";
+  position: absolute;
+  right: 12px;
+  top: -3px;
+  bottom: -3px;
+  width: 6px;
+  border-inline: 1.5px solid var(--muted);
+  background: var(--sheet);
+  transform: skewX(-22deg);
+}
+.rulerEnds {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+  font: 400 12px/1 var(--mono);
+  color: var(--muted);
+}
+
+.leaders {
+  margin: 16px 0 18px;
+  padding: 0;
+  list-style: none;
+}
+.leaders li {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 4px 0;
+  font-size: 15px;
+}
+.leaders li::after {
+  content: "";
+  order: 1;
+  flex: 1;
+  min-width: 10px;
+  border-bottom: 1.5px dotted var(--rule-2);
+  transform: translateY(-4px);
+}
+.leaders span {
+  color: var(--ink-2);
+}
+.leaders b {
+  order: 2;
+  font: 600 14px/1.2 var(--mono);
+  color: var(--ink);
+  text-align: right;
+}
+.hit {
+  color: var(--pen) !important;
+}
+.hit::before {
+  content: "✓ ";
+}
+.miss::before {
+  content: "✗ ";
+}
+
+.dl {
+  gap: 10px;
+}
+.dlSize {
+  font: 400 15px/1 var(--mono);
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.actions :global(.btn) {
+  flex: 1 1 auto;
+}
+
+/* catatan kaki nota: di bawah garis sobek, tanpa kotak */
+.note {
+  margin: 22px -24px 0;
+  padding: 16px 24px 0;
+  border-top: 1.5px dashed var(--rule-2);
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--ink-2);
+}
+.note b {
+  color: var(--ink);
+}
+.note ul {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.note li {
+  position: relative;
+  padding-left: 16px;
+}
+.note li::before {
+  content: "*";
+  position: absolute;
+  left: 2px;
+  top: 0;
+  font: 600 14px/1.55 var(--mono);
+  color: var(--muted);
+}
+.note li + li {
+  margin-top: 4px;
+}
+
+/* ---------- belum tercapai: baris vonis di nota, ikon + teks (bukan merah saja) ---------- */
+.verdict {
+  display: flex;
+  gap: 12px;
+  margin: 0 -24px;
+  padding: 16px 24px 16px;
+  border-bottom: 1.5px dashed var(--rule-2);
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+.verdict > svg {
+  flex: none;
+  margin-top: 1px;
+  color: var(--ink);
+}
+.verdictTitle {
+  margin-bottom: 2px;
+  font-size: 17px;
+  font-weight: 750;
+  line-height: 1.35;
+  color: var(--ink);
+}
+
+/* ---------- gagal: kotak "PERHATIAN" bergaris tipis seperti di formulir ---------- */
+.alert {
+  position: relative;
+  display: flex;
+  gap: 12px;
+  margin: 26px 0 4px;
+  padding: 18px 16px 14px;
+  border: 1px solid var(--ink-2);
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+.alert > svg {
+  flex: none;
+  margin-top: 1px;
+  color: var(--ink);
+}
+.alertLabel {
+  position: absolute;
+  left: 12px;
+  top: 0;
+  padding: 0 6px;
+  background: var(--sheet);
+  font: 600 12px/1 var(--mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink);
+  transform: translateY(-50%);
+}
+.alertTitle {
+  margin-bottom: 2px;
+  font-size: 17px;
+  font-weight: 750;
+  color: var(--ink);
+}
+.partial .rulerFill {
+  background: var(--ink-2);
+}
+
+.tips {
+  position: relative;
+  margin: 22px -24px -22px;
+  padding: 18px 24px 22px;
+  border-top: 2px dashed var(--rule-2);
+  background: var(--sheet-2);
+}
+.tipsTitle {
+  margin-bottom: 8px;
+  font-size: 16px;
+  font-weight: 750;
+}
+.tips ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: tip;
+}
+.tips ol > li {
+  position: relative;
+  padding: 5px 0 5px 30px;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--ink-2);
+  counter-increment: tip;
+}
+.tips ol > li::before {
+  content: counter(tip, decimal-leading-zero);
+  position: absolute;
+  left: 0;
+  top: 7px;
+  font: 600 13px/1.4 var(--mono);
+  color: var(--muted);
+}
+.tips b {
+  color: var(--ink);
+}
+.catatan {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--rule);
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--ink-2);
+}
+.catatan h4 {
+  font-size: 14px;
+  font-weight: 750;
+  color: var(--ink);
+}
+.catatan ul {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.catatan li {
+  position: relative;
+  padding-left: 16px;
+}
+.catatan li::before {
+  content: "*";
+  position: absolute;
+  left: 2px;
+  font: 600 14px/1.55 var(--mono);
+  color: var(--muted);
+}
+
+.errActions {
+  margin-top: 16px;
+}
+
+/* ---------- sedang bekerja ---------- */
+.working {
+  padding-top: 18px;
+}
+.workTop {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.spin {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border: 3px solid var(--pen);
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: putar 0.9s linear infinite;
+}
+@keyframes putar {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.workText {
+  min-width: 0;
+}
+.stage {
+  font-size: 18px;
+  font-weight: 750;
+  line-height: 1.3;
+  color: var(--ink);
+}
+.detail {
+  overflow: hidden;
+  font: 400 14px/1.5 var(--mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-2);
+}
+.pct {
+  margin-left: auto;
+  font: 600 20px/1 var(--mono);
+  color: var(--ink);
+}
+.progress {
+  position: relative;
+  height: 14px;
+  margin-top: 16px;
+  border-radius: var(--r-sm);
+  background-color: var(--kraft-soft);
+  background-image: repeating-linear-gradient(90deg, var(--rule-2) 0 1px, transparent 1px 10%);
+  overflow: hidden;
+}
+.progressFill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--pen);
+  transition: width 0.3s ease-out;
+}
+.wait {
+  margin: 14px 0 16px;
+  font-size: 14px;
+  color: var(--ink-2);
+}
+
+/* ---------- password ---------- */
+.pw {
+  padding-top: 18px;
+}
+.pwHead {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 17px;
+  line-height: 1.4;
+  color: var(--ink);
+}
+.pwHead svg {
+  flex: none;
+  margin-top: 1px;
+}
+.pwWrong {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--ink);
+}
+.pwWrong svg {
+  flex: none;
+  margin-top: 2px;
+}
+.pwLabel {
+  display: block;
+  margin: 16px 0 6px;
+  font-size: 15px;
+  font-weight: 650;
+}
+.pwRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.pwRow input {
+  flex: 1 1 200px;
+  min-width: 0;
+  height: 48px;
+  padding: 0 12px;
+  border: 1.5px solid var(--ink-2);
+  border-radius: var(--r);
+  background: var(--sheet);
+  font-size: 16px;
+  color: var(--ink);
+}
+.pwRow input:focus-visible {
+  outline: 2px solid var(--pen);
+  outline-offset: 1px;
+  border-color: var(--pen);
+}
+.pwNote {
+  margin: 10px 0 14px;
+  font-size: 14px;
+  color: var(--ink-2);
+}
+
+/* ---------- contoh (belum ada file): jelas-jelas contoh ---------- */
+.preview {
+  border: 1.5px dashed var(--rule-2);
+  background: color-mix(in srgb, var(--sheet) 40%, transparent);
+  box-shadow: none;
+}
+.preview .head {
+  border-bottom-style: dotted;
+}
+.preview .fileName,
+.preview .now .v,
+.preview .leaders b,
+.preview .leaders span {
+  color: var(--muted);
+}
+.preview .was .v::after {
+  opacity: 0.6;
+}
+.preview .rulerFill {
+  background: var(--rule-2);
+}
+.preview .rulerTgt::before {
+  background: var(--muted);
+}
+.preview .rulerTgt span {
+  color: var(--muted);
+}
+.preview .sizes {
+  padding-right: 0;
+}
+.ghostBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 52px;
+  border: 1.5px dashed var(--rule-2);
+  border-radius: var(--r);
+  font-weight: 700;
+  color: var(--muted);
+}
+
+/* ---------- lebar: dua kolom ---------- */
+@container hasil (min-width: 640px) {
+  .grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.08fr) minmax(0, 1fr);
+    gap: 0 36px;
+  }
+  .colB {
+    padding-top: 14px;
+  }
+  .leaders {
+    margin-top: 0;
+  }
+  .sizes {
+    padding-right: 0;
+  }
+  .stamp {
+    top: 96px;
+    right: 0;
+  }
+}
+
+@container hasil (max-width: 420px) {
+  .receipt {
+    padding: 0 16px 18px;
+  }
+  .head {
+    margin: 0 -16px;
+    padding: 0 56px 0 16px;
+  }
+  .tips {
+    margin: 20px -16px -18px;
+    padding: 16px 16px 18px;
+  }
+  .verdict,
+  .note {
+    margin-inline: -16px;
+    padding-inline: 16px;
+  }
+  .sizes {
+    padding-right: 0;
+  }
+  .now .v {
+    font-size: 46px;
+  }
+  .stamp {
+    top: 66px;
+  }
+  .stamp b {
+    font-size: 20px;
+  }
+}

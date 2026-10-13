@@ -1,0 +1,25 @@
+.btn {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--rule-2);
+  border-radius: var(--r);
+  background: transparent;
+  color: var(--ink);
+}
+.btn:hover {
+  border-color: var(--ink-2);
+}
+.btn svg {
+  transition: transform 0.25s;
+}
+:root[data-theme="dark"] .btn svg {
+  transform: rotate(180deg);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .btn svg {
+    transform: rotate(180deg);
+  }
+}

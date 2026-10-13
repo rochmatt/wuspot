@@ -1,0 +1,68 @@
+/* lembar disposisi: kertas map muda, garis tipis, label kode formulir */
+.slip {
+  margin-top: 28px;
+  border: 1px solid var(--ink-2);
+  border-radius: var(--r-sm);
+  background: var(--kraft-soft);
+}
+.rows {
+  margin: 0;
+}
+.row {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  align-items: baseline;
+  gap: 4px 16px;
+  padding: 12px 20px;
+  border-bottom: 1px solid color-mix(in srgb, var(--ink-2) 40%, transparent);
+}
+.row dt {
+  font: 600 12px/1.6 var(--mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+.row dt::after {
+  content: ":";
+}
+.row dd {
+  margin: 0;
+  min-width: 0;
+  font-size: 16px;
+  color: var(--ink);
+}
+.email {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--pen);
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 5px;
+  overflow-wrap: anywhere;
+}
+.email:hover {
+  text-decoration-thickness: 3px;
+}
+.note {
+  max-width: 36em;
+  padding: 12px 20px 14px;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--ink-2);
+}
+@media (max-width: 599px) {
+  .row {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 10px 14px;
+  }
+  .email {
+    font-size: 22px;
+  }
+  .note {
+    padding: 10px 14px 12px;
+  }
+}

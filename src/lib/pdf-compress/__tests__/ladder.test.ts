@@ -19,17 +19,21 @@ function sizes(values: number[]) {
 }
 
 describe("tangga", () => {
-  it("IMAGE_LADDER makin kecil: maxSide & quality tidak naik", () => {
+  it("IMAGE_LADDER makin kecil: maxSide & quality tidak naik, minimal satu turun", () => {
     for (let i = 1; i < IMAGE_LADDER.length; i++) {
-      expect(IMAGE_LADDER[i].maxSide).toBeLessThanOrEqual(IMAGE_LADDER[i - 1].maxSide);
-      expect(IMAGE_LADDER[i].quality).toBeLessThan(IMAGE_LADDER[i - 1].quality);
+      const [prev, cur] = [IMAGE_LADDER[i - 1], IMAGE_LADDER[i]];
+      expect(cur.maxSide).toBeLessThanOrEqual(prev.maxSide);
+      expect(cur.quality).toBeLessThanOrEqual(prev.quality);
+      expect(cur.maxSide < prev.maxSide || cur.quality < prev.quality).toBe(true);
     }
   });
 
-  it("RASTER_LADDER makin kecil: dpi & quality tidak naik", () => {
+  it("RASTER_LADDER makin kecil: dpi & quality tidak naik, minimal satu turun", () => {
     for (let i = 1; i < RASTER_LADDER.length; i++) {
-      expect(RASTER_LADDER[i].dpi).toBeLessThanOrEqual(RASTER_LADDER[i - 1].dpi);
-      expect(RASTER_LADDER[i].quality).toBeLessThan(RASTER_LADDER[i - 1].quality);
+      const [prev, cur] = [RASTER_LADDER[i - 1], RASTER_LADDER[i]];
+      expect(cur.dpi).toBeLessThanOrEqual(prev.dpi);
+      expect(cur.quality).toBeLessThanOrEqual(prev.quality);
+      expect(cur.dpi < prev.dpi || cur.quality < prev.quality).toBe(true);
     }
   });
 
@@ -53,11 +57,12 @@ describe("tangga", () => {
       raster: null,
       rasterizeWithText: false,
     });
-    expect(LEVEL_PRESETS.sedang.image).toEqual({ maxSide: 1600, quality: 0.62 });
-    expect(LEVEL_PRESETS.sedang.raster).toEqual({ dpi: 120, quality: 0.62 });
+    // Nilai hasil pengukuran (lihat komentar di ladder.ts).
+    expect(LEVEL_PRESETS.sedang.image).toEqual({ maxSide: 1600, quality: 0.55 });
+    expect(LEVEL_PRESETS.sedang.raster).toEqual({ dpi: 150, quality: 0.4 });
     expect(LEVEL_PRESETS.sedang.rasterizeWithText).toBe(false);
-    expect(LEVEL_PRESETS.kuat.image).toEqual({ maxSide: 1000, quality: 0.45 });
-    expect(LEVEL_PRESETS.kuat.raster).toEqual({ dpi: 90, quality: 0.5 });
+    expect(LEVEL_PRESETS.kuat.image).toEqual({ maxSide: 1100, quality: 0.3 });
+    expect(LEVEL_PRESETS.kuat.raster).toEqual({ dpi: 100, quality: 0.3 });
     expect(LEVEL_PRESETS.kuat.rasterizeWithText).toBe(true);
   });
 
