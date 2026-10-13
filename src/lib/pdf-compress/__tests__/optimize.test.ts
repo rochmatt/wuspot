@@ -1,15 +1,16 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { crc32, deflateSync, inflateSync } from "node:zlib";
 import jpeg from "jpeg-js";
-import { PDFDict, PDFDocument, PDFName, PDFRawStream, PDFRef, StandardFonts, type PDFContext, type PDFObject } from "pdf-lib";
+import { PDFArray, PDFDict, PDFDocument, PDFName, PDFRawStream, PDFRef, StandardFonts, type PDFContext, type PDFObject } from "pdf-lib";
 import { describe, expect, it } from "vitest";
 import {
   analyzeImage,
   applyEncodedImages,
   boxFactor,
+  flateBoxFactor,
   decodeFlateRaster,
   estimateWithImages,
   findImageCandidates,
@@ -199,7 +200,79 @@ describe("loadEditable", () => {
     expect(loaded).not.toBeNull();
     expect(loaded?.getProducer()).toBe("Scanner ABC");
   });
+
+  // "Fast Web View" (linearized) + object stream: /Info hanya ada di stream xref
+  // halaman pertama. Tanpa pdflib-patches.ts metadata ini hilang.
+  it.skipIf(!hasPikepdf())("membaca /Info dari PDF linearized dengan object stream", async () => {
+    const doc = await PDFDocument.create();
+    doc.addPage().drawText("halo", { x: 50, y: 700, size: 12, font: await doc.embedFont(StandardFonts.Helvetica) });
+    doc.addPage();
+    doc.setAuthor("Budi Santoso");
+    doc.setSubject("Berkas lamaran");
+    const dir = mkdtempSync(join(tmpdir(), "wuspot-lin-"));
+    try {
+      const src = join(dir, "src.pdf");
+      const out = join(dir, "lin.pdf");
+      writeFileSync(src, await doc.save({ useObjectStreams: false }));
+      const script = [
+        "import pikepdf",
+        `p = pikepdf.open(${JSON.stringify(src)})`,
+        `p.save(${JSON.stringify(out)}, linearize=True, object_stream_mode=pikepdf.ObjectStreamMode.generate)`,
+      ].join("\n");
+      expect(spawnSync("python3", ["-c", script]).status).toBe(0);
+      const loaded = await loadEditable(new Uint8Array(readFileSync(out)));
+      expect(loaded).not.toBeNull();
+      expect(loaded!.getPageCount()).toBe(2);
+      expect(loaded!.getAuthor()).toBe("Budi Santoso");
+      expect(loaded!.getSubject()).toBe("Berkas lamaran");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
+
+describe("pdflib-patches: nama dengan escape heksa huruf kecil", () => {
+  /** PDF minimal yang ditulis tangan (offset xref dihitung benar). */
+  function handMadePdf(): Uint8Array {
+    const content = "BT /F#e51 24 Tf 72 700 Td (Nama: Budi) Tj ET";
+    const objects = [
+      "<< /Type /Catalog /Pages 2 0 R >>",
+      "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F#e51 4 0 R >> >> /Contents 5 0 R >>",
+      "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+      `<< /Length ${content.length} >>\nstream\n${content}\nendstream`,
+    ];
+    let pdf = "%PDF-1.4\n";
+    const offsets: number[] = [];
+    objects.forEach((body, i) => {
+      offsets.push(pdf.length);
+      pdf += `${i + 1} 0 obj\n${body}\nendobj\n`;
+    });
+    const xref = pdf.length;
+    pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+    for (const o of offsets) pdf += `${String(o).padStart(10, "0")} 00000 n \n`;
+    pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+    return enc.encode(pdf);
+  }
+
+  it("menyimpan ulang tanpa merusak nama /F#e51 (halaman tidak jadi kosong)", async () => {
+    // Sama artinya menurut ISO 32000: #e5 dan #E5 adalah byte 0xE5.
+    expect(PDFName.of("F#e51")).toBe(PDFName.of("F#E51"));
+    const doc = await loadEditable(handMadePdf());
+    expect(doc).not.toBeNull();
+    await optimizeStructure(doc!);
+    const saved = await savePdf(doc!);
+    const text = Buffer.from(saved).toString("latin1");
+    expect(text).not.toContain("#23e5");
+    expect(text).not.toContain("#23E5");
+    const poppler = popplerCheck(saved);
+    if (poppler) expect(poppler.text).toContain("Nama: Budi");
+  });
+});
+
+function hasPikepdf(): boolean {
+  return spawnSync("python3", ["-c", "import pikepdf"]).status === 0;
+}
 
 describe("optimizeStructure", () => {
   it("membuang objek yatim, PieceInfo, Thumb dan mengompres stream polos", async () => {
@@ -350,11 +423,15 @@ describe("images: findImageCandidates", () => {
         { ...base, ColorSpace: "DeviceRGB", Filter: "DCTDecode", DecodeParms: { ColorTransform: 0 } },
         makeJpeg(200, 200),
       ),
+      // CalGray bergamma ~2,2 aman dibaca sebagai DeviceGray; gamma 1 (bawaan) tidak.
+      calGray22: imageStream(ctx, { ...base, ColorSpace: ["CalGray", { WhitePoint: [0.9505, 1, 1.089], Gamma: 2.2 }], Filter: "FlateDecode" }, packed),
+      calGrayLinear: imageStream(ctx, { ...base, ColorSpace: ["CalGray", { WhitePoint: [0.9505, 1, 1.089] }], Filter: "FlateDecode" }, packed),
+      calRgb: imageStream(ctx, { ...base, ColorSpace: ["CalRGB", { WhitePoint: [0.9505, 1, 1.089], Gamma: [1.8, 1.8, 1.8] }], Filter: "FlateDecode" }, packed),
     };
     await doc.flush(); // embedJpg baru menulis stream saat flush
 
     const found = new Set(findImageCandidates(doc).map((c) => c.refTag));
-    const expectIn = ["flateRgb", "flateArrFilter", "iccRgb", "goodPredictor", "hexChain", "lzw"] as const;
+    const expectIn = ["flateRgb", "flateArrFilter", "iccRgb", "goodPredictor", "hexChain", "lzw", "calGray22", "calRgb"] as const;
     for (const k of expectIn) expect(found.has(refs[k].tag), k).toBe(true);
     const expectOut = [
       "iccCmyk",
@@ -370,6 +447,7 @@ describe("images: findImageCandidates", () => {
       "smallStream",
       "badPredictor",
       "dctTransform",
+      "calGrayLinear",
     ] as const;
     for (const k of expectOut) expect(found.has(refs[k].tag), k).toBe(false);
     // SMask milik gambar lain tidak boleh ikut dikompres jadi JPEG RGB.
@@ -476,6 +554,10 @@ describe("images: decode Flate", () => {
     expect(boxFactor(4000, 3000, 1000, 750)).toBe(4);
     expect(boxFactor(4000, 3000, 2000, 1500)).toBe(2);
     expect(boxFactor(1000, 1000, 700, 700)).toBe(1);
+    // Batas luas canvas iOS (16 MP): 4500x4000 dengan target 2400 sisi tidak boleh k=1 (18 MP).
+    expect(boxFactor(4500, 4000, 2400, 2133)).toBe(1);
+    expect(flateBoxFactor(4500, 4000, 2400, 2133)).toBe(2);
+    expect(flateBoxFactor(4000, 3000, 1000, 750)).toBe(4);
   });
 });
 
@@ -502,13 +584,14 @@ describe("images: scanJpeg", () => {
 });
 
 describe("images: applyEncodedImages & estimateWithImages", () => {
-  it("mengganti stream, mempertahankan SMask, membuang ICC yatim, dan bisa di-undo", async () => {
+  it("mengganti stream, mempertahankan SMask & profil ICC, membuang metadata yatim, dan bisa di-undo", async () => {
     const doc = await PDFDocument.create();
     const page = doc.addPage();
     const ctx = doc.context;
     const raw = noisyRgb(300, 300, 3);
     const packed = await deflateBytes(raw);
     const icc = ctx.register(ctx.flateStream(new Uint8Array(5000), { N: 3 }));
+    const meta = ctx.register(ctx.stream("<x/>"));
     const smask = imageStream(
       ctx,
       { Type: "XObject", Subtype: "Image", Width: 10, Height: 10, ColorSpace: "DeviceGray", BitsPerComponent: 8 },
@@ -526,7 +609,7 @@ describe("images: applyEncodedImages & estimateWithImages", () => {
         Filter: "FlateDecode",
         SMask: smask,
         Interpolate: true,
-        Metadata: ctx.register(ctx.stream("<x/>")),
+        Metadata: meta,
       },
       packed,
     );
@@ -549,15 +632,20 @@ describe("images: applyEncodedImages & estimateWithImages", () => {
     const replaced = rawAt(reloaded.context, imgRef);
     const d = replaced.dict;
     expect(d.get(PDFName.of("Filter"))).toBe(PDFName.of("DCTDecode"));
-    expect(d.get(PDFName.of("ColorSpace"))).toBe(PDFName.of("DeviceRGB"));
+    // Sumber ICCBased N=3: ruang warnanya dipertahankan supaya warna tidak bergeser.
+    const cs = d.lookup(PDFName.of("ColorSpace"));
+    expect(cs).toBeInstanceOf(PDFArray);
+    expect((cs as PDFArray).get(0)).toBe(PDFName.of("ICCBased"));
+    expect((cs as PDFArray).get(1)).toBe(icc);
     expect(d.lookup(PDFName.of("Width"))?.toString()).toBe("150");
     expect(d.get(PDFName.of("SMask"))).toBe(smask);
     expect(d.has(PDFName.of("Interpolate"))).toBe(true);
     expect(d.has(PDFName.of("Metadata"))).toBe(false);
     expect(d.has(PDFName.of("DecodeParms"))).toBe(false);
     expect(replaced.contents).toBe(newJpeg);
-    // ICC lama kini yatim -> dibuang
-    expect(reloaded.context.lookup(icc)).toBeUndefined();
+    // Profil ICC masih dipakai gambar baru; metadata gambar lama kini yatim -> dibuang.
+    expect(reloaded.context.lookup(icc)).toBeInstanceOf(PDFRawStream);
+    expect(reloaded.context.lookup(meta)).toBeUndefined();
     expect(reloaded.context.lookup(smask)).toBeDefined();
 
     const saved = await savePdf(reloaded);
@@ -569,7 +657,7 @@ describe("images: applyEncodedImages & estimateWithImages", () => {
     undo();
     const restored = rawAt(reloaded.context, imgRef);
     expect(restored.dict.get(PDFName.of("Filter"))).toBe(PDFName.of("FlateDecode"));
-    expect(reloaded.context.lookup(icc)).toBeInstanceOf(PDFRawStream);
+    expect(reloaded.context.lookup(meta)).toBeInstanceOf(PDFRawStream);
     expect(findImageCandidates(reloaded).map((c) => c.refTag)).toEqual([imgRef.tag]);
     expect(reloaded.context.lookup(imgRef)).toBeInstanceOf(PDFRawStream);
     expect((reloaded.context.lookup(icc) as PDFRawStream).dict).toBeInstanceOf(PDFDict);

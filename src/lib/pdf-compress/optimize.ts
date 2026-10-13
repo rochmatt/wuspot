@@ -13,6 +13,7 @@ import {
   PDFRef,
   PDFStream,
 } from "pdf-lib";
+import "./pdflib-patches";
 
 const N = {
   Thumb: PDFName.of("Thumb"),

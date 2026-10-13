@@ -18,6 +18,7 @@ import {
 } from "pdf-lib";
 import type { PDFContext } from "pdf-lib";
 import { bitmapToJpeg, createCanvas, releaseCanvas, type AnyCanvas } from "./canvas";
+import { MAX_CANVAS_AREA } from "./rasterize";
 import { inflateBytes, removeUnreachable } from "./optimize";
 import { rowBytes, undoPredictor } from "./png-predictor";
 import { CompressError } from "./types";
@@ -80,6 +81,7 @@ const N = {
   CalRGB: PDFName.of("CalRGB"),
   CalGray: PDFName.of("CalGray"),
   Lab: PDFName.of("Lab"),
+  Gamma: PDFName.of("Gamma"),
 } as const;
 
 /** Kunci dict lama yang tetap dibawa ke stream baru. */
@@ -173,7 +175,7 @@ export function colorComponents(context: PDFContext, csObj: PDFObject | undefine
 
   const family = resolve(context, cs.get(0));
   if (family === N.CalRGB) return 3;
-  if (family === N.CalGray) return 1;
+  if (family === N.CalGray) return calGrayNearDeviceGray(context, cs) ? 1 : null;
   if (family !== N.ICCBased || cs.size() < 2) return null;
 
   const profile = resolve(context, cs.get(1));
@@ -182,6 +184,28 @@ export function colorComponents(context: PDFContext, csObj: PDFObject | undefine
   if (alt === N.Lab || (alt instanceof PDFArray && resolve(context, alt.get(0)) === N.Lab)) return null;
   const n = num(context, profile.dict.get(N.N));
   return n === 1 || n === 3 ? n : null;
+}
+
+/**
+ * Gambar abu-abu ditulis ulang sebagai DeviceRGB (JPEG canvas selalu 3
+ * komponen). Itu hanya aman bila gamma CalGray-nya dekat ~2,2; gamma lain
+ * (bawaannya 1,0) membuat nada bergeser jelas, jadi gambar seperti itu dilewati.
+ */
+function calGrayNearDeviceGray(context: PDFContext, cs: PDFArray): boolean {
+  const params = resolve(context, cs.get(1));
+  const gamma = params instanceof PDFDict ? (num(context, params.get(N.Gamma)) ?? 1) : 1;
+  return gamma >= 1.9 && gamma <= 2.5;
+}
+
+/**
+ * Ruang warna untuk gambar baru. Nilai piksel tidak diubah saat decode
+ * (colorSpaceConversion "none"), jadi sumber 3 komponen yang dikelola warna
+ * (ICCBased N=3, CalRGB) tetap memakai ruang warna aslinya supaya warnanya
+ * tidak bergeser. Sumber abu-abu & DeviceRGB ditulis sebagai DeviceRGB.
+ */
+function outputColorSpace(context: PDFContext, cs: PDFObject | undefined): PDFObject {
+  if (cs === undefined || resolve(context, cs) === N.DeviceRGB) return N.DeviceRGB;
+  return colorComponents(context, cs) === 3 ? cs : N.DeviceRGB;
 }
 
 function isTrue(context: PDFContext, obj: PDFObject | undefined): boolean {
@@ -279,6 +303,25 @@ export function findImageCandidates(doc: PDFDocument): ImageCandidate[] {
   return out.sort((a, b) => b.streamBytes - a.streamBytes);
 }
 
+/**
+ * Total byte gambar (bukan mask) yang tidak bisa diolah jalur "images", mis.
+ * CMYK, Indexed, JPEG 2000, 1-bit, atau terlalu besar. Dipakai supaya catatan
+ * hasil jujur: file seperti ini bukan "sudah ringkas", hanya belum bisa
+ * dikecilkan tanpa mengubah halaman jadi gambar.
+ */
+export function ineligibleImageBytes(doc: PDFDocument, candidates: ImageCandidate[]): number {
+  const { context } = doc;
+  const eligible = new Set(candidates.map((c) => c.refTag));
+  const masks = maskRefs(context);
+  let total = 0;
+  for (const [ref, obj] of context.enumerateIndirectObjects()) {
+    if (!(obj instanceof PDFRawStream) || masks.has(ref) || eligible.has(ref.tag)) continue;
+    if (resolve(context, obj.dict.get(N.Subtype)) !== N.Image) continue;
+    total += obj.contents.length;
+  }
+  return total;
+}
+
 // ---------------------------------------------------------------------------
 // Encode (tidak mengubah dokumen)
 
@@ -314,12 +357,12 @@ export async function encodeImages(
       attempted++;
       const size = targetSize(info.width, info.height, step.maxSide);
       try {
-        const bytes =
+        const encoded =
           info.kind === "jpeg"
             ? await reencodeJpeg(stripTransport(stream, info), info, size, step.quality, grayscale)
             : await reencodeFlate(stream, info, size, step.quality, grayscale);
-        if (bytes && bytes.length < c.streamBytes * KEEP_RATIO) {
-          out.push({ refTag: c.refTag, bytes, width: size.width, height: size.height });
+        if (encoded && encoded.bytes.length < c.streamBytes * KEEP_RATIO) {
+          out.push({ refTag: c.refTag, ...encoded });
         }
       } catch (err) {
         if (isOutOfMemory(err)) {
@@ -352,13 +395,19 @@ function isOutOfMemory(err: unknown): boolean {
   return err instanceof RangeError || (err instanceof CompressError && err.code === "out-of-memory");
 }
 
+interface Reencoded {
+  bytes: Uint8Array;
+  width: number;
+  height: number;
+}
+
 async function reencodeJpeg(
   contents: Uint8Array,
   info: ImageInfo,
   size: { width: number; height: number },
   quality: number,
   grayscale: boolean,
-): Promise<Uint8Array | null> {
+): Promise<Reencoded | null> {
   const header = scanJpeg(contents);
   if (!header) return null;
   const { sof } = header;
@@ -373,14 +422,15 @@ async function reencodeJpeg(
   // (opsi resizeWidth pada Blob) diukur di Chromium: hasilnya lebih kasar dan
   // malah lebih besar, jadi tidak dipakai.
   const bitmap = await createImageBitmap(blob, {
-    // Nilai piksel mentah, persis seperti yang dibaca viewer PDF.
+    // Nilai piksel mentah, persis seperti yang dibaca viewer PDF. (JPEG tidak
+    // punya alpha, jadi premultiplyAlpha tidak perlu diatur: opsi itu memaksa
+    // satu lintasan tambahan di main thread.)
     colorSpaceConversion: "none",
     imageOrientation: "none",
-    premultiplyAlpha: "none",
   });
   try {
     if (bitmap.width !== info.width || bitmap.height !== info.height) return null;
-    return await bitmapToJpeg(bitmap, { ...size, quality, grayscale });
+    return { bytes: await bitmapToJpeg(bitmap, { ...size, quality, grayscale }), ...size };
   } finally {
     bitmap.close();
   }
@@ -392,25 +442,36 @@ async function reencodeFlate(
   size: { width: number; height: number },
   quality: number,
   grayscale: boolean,
-): Promise<Uint8Array | null> {
+): Promise<Reencoded | null> {
   const raster = await decodeFlateRaster(stream, info);
   if (!raster) return null;
 
   // Kecilkan dulu dengan rata-rata blok (faktor bulat) supaya canvas &
-  // ImageData yang dibuat tidak sebesar gambar aslinya.
-  const k = boxFactor(info.width, info.height, size.width, size.height);
+  // ImageData yang dibuat tidak sebesar gambar aslinya, dan tidak melewati
+  // batas luas canvas iOS Safari (di atasnya canvas diam-diam kosong).
+  const k = flateBoxFactor(info.width, info.height, size.width, size.height);
   const w = Math.ceil(info.width / k);
   const h = Math.ceil(info.height / k);
   const imageData = new ImageData(w, h);
   rasterToRgba(raster, info.width, info.height, info.components, k, imageData.data);
 
+  // Bila batas luas memaksa k lebih besar, hasilnya sedikit lebih kecil dari
+  // target; jangan diperbesar lagi.
+  const out = { width: Math.min(size.width, w), height: Math.min(size.height, h) };
   const canvas = createCanvas(w, h);
   try {
     contextOf(canvas).putImageData(imageData, 0, 0);
-    return await bitmapToJpeg(canvas, { ...size, quality, grayscale });
+    return { bytes: await bitmapToJpeg(canvas, { ...out, quality, grayscale }), ...out };
   } finally {
     releaseCanvas(canvas);
   }
+}
+
+/** {@link boxFactor}, dinaikkan sampai canvas perantaranya muat batas luas canvas. */
+export function flateBoxFactor(width: number, height: number, targetW: number, targetH: number): number {
+  let k = boxFactor(width, height, targetW, targetH);
+  while (Math.ceil(width / k) * Math.ceil(height / k) > MAX_CANVAS_AREA) k++;
+  return k;
 }
 
 function contextOf(canvas: AnyCanvas): CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D {
@@ -645,7 +706,7 @@ export function applyEncodedImages(doc: PDFDocument, encoded: EncodedImage[]): (
       Width: e.width,
       Height: e.height,
       // JPEG dari canvas selalu 3 komponen, juga untuk mode hitam-putih.
-      ColorSpace: "DeviceRGB",
+      ColorSpace: outputColorSpace(context, old.dict.get(N.ColorSpace)),
       BitsPerComponent: 8,
       Filter: "DCTDecode",
     });

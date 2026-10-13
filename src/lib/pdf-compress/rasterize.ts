@@ -33,6 +33,8 @@ export interface RasterMaster {
   /** Dpi yang diminta. Halaman sangat besar bisa dirender lebih rendah. */
   dpi: number;
   pages: RasterPageMaster[];
+  /** Ada tautan (link) atau lampiran di halaman — keduanya hilang setelah rasterize. */
+  hasLinks: boolean;
 }
 
 /** Batas aman canvas di iOS Safari. */
@@ -87,6 +89,18 @@ export function outputPageSize(page: Pick<RasterPageMaster, "widthPt" | "heightP
   return { width: w * s, height: h * s };
 }
 
+/** JPEG halaman terkecil yang mungkin (halaman kosong, 50 dpi, q 0,3) kira-kira segini. */
+const MIN_PAGE_JPEG_BYTES = 1024;
+
+/**
+ * Batas bawah ukuran PDF hasil rasterize untuk `pages` halaman. Bila hasil
+ * lain sudah sekecil ini, rasterize pasti tidak bisa menang (dan tidak perlu
+ * dicoba: menggambar ratusan halaman memakan waktu & memori).
+ */
+export function rasterLowerBound(pages: number): number {
+  return RASTER_BASE_OVERHEAD + Math.max(0, pages) * (RASTER_PAGE_OVERHEAD + MIN_PAGE_JPEG_BYTES);
+}
+
 export function estimateRasterPdfBytes(pageJpegs: Uint8Array[]): number {
   let total = RASTER_BASE_OVERHEAD;
   for (const jpg of pageJpegs) total += jpg.length + RASTER_PAGE_OVERHEAD;
@@ -103,12 +117,15 @@ export async function renderMasters(
 ): Promise<RasterMaster> {
   const total = doc.numPages;
   const pages: RasterPageMaster[] = [];
+  let hasLinks = false;
   for (let n = 1; n <= total; n++) {
     throwIfAborted(opts.signal);
-    pages.push(await renderPageMaster(doc, n, dpi, opts.signal));
+    const rendered = await renderPageMaster(doc, n, dpi, opts.signal);
+    pages.push(rendered.master);
+    hasLinks ||= rendered.hasLinks;
     opts.onPage?.(n, total);
   }
-  return { dpi, pages };
+  return { dpi, pages, hasLinks };
 }
 
 async function renderPageMaster(
@@ -116,7 +133,7 @@ async function renderPageMaster(
   pageNumber: number,
   dpi: number,
   signal?: AbortSignal,
-): Promise<RasterPageMaster> {
+): Promise<{ master: RasterPageMaster; hasLinks: boolean }> {
   const page = await doc.getPage(pageNumber);
   let canvas: AnyCanvas | null = null;
   try {
@@ -141,10 +158,36 @@ async function renderPageMaster(
     await renderPage(page, canvas, viewport, fit, pageNumber, signal);
 
     const blob = await canvasToJpegBlob(canvas, MASTER_JPEG_QUALITY);
-    return { blob, pxWidth, pxHeight, widthPt, heightPt };
+    return { master: { blob, pxWidth, pxHeight, widthPt, heightPt }, hasLinks: await pageHasLinks(page) };
   } finally {
     if (canvas) releaseCanvas(canvas);
     page.cleanup();
+  }
+}
+
+/**
+ * Dengan intent "display", pdf.js menjadwalkan tiap potongan render lewat
+ * requestAnimationFrame, yang berhenti total saat tab/aplikasi ada di belakang
+ * (mis. pengguna membuka WhatsApp sambil menunggu). Canvas kita tidak tampil di
+ * layar, jadi tidak perlu menunggu frame. Intent "print" bukan pilihan: layer
+ * dan anotasinya mengikuti aturan cetak, bisa beda dengan yang terlihat.
+ *
+ * Ini memakai field internal pdf.js 6 (diatur sebelum potongan pertama
+ * dijadwalkan). Kalau suatu saat field itu tidak ada, render tetap berjalan,
+ * hanya kembali menunggu frame.
+ */
+function renderWithoutAnimationFrames(task: unknown): void {
+  const internal = (task as { _internalRenderTask?: { _useRequestAnimationFrame?: unknown } })._internalRenderTask;
+  if (internal && typeof internal._useRequestAnimationFrame === "boolean") internal._useRequestAnimationFrame = false;
+}
+
+/** Link & lampiran di halaman ini (hilang di hasil rasterize, jadi perlu catatan). */
+async function pageHasLinks(page: PDFPageProxy): Promise<boolean> {
+  try {
+    const annots: Array<{ subtype?: unknown }> = await page.getAnnotations({ intent: "display" });
+    return annots.some((a) => a.subtype === "Link" || a.subtype === "FileAttachment");
+  } catch {
+    return false;
   }
 }
 
@@ -157,6 +200,7 @@ async function renderPage(
   signal?: AbortSignal,
 ): Promise<void> {
   const task = page.render({ canvas, viewport, transform, background: "#ffffff", intent: "display" });
+  renderWithoutAnimationFrames(task);
   const onAbort = () => task.cancel();
   signal?.addEventListener("abort", onAbort, { once: true });
   try {

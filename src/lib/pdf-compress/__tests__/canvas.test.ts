@@ -32,10 +32,19 @@ describe("paperLevels", () => {
     expect(lut).not.toBeNull();
     const l = lut!;
     expect(l[215]).toBe(255);
-    expect(l[205]).toBe(255); // derau kertas ikut putih
+    expect(l[209]).toBe(255); // derau kertas (~1 sigma) ikut putih
     expect(l[40]).toBeLessThan(60);
     expect(l[0]).toBe(0);
     for (let v = 1; v < 256; v++) expect(l[v]).toBeGreaterThanOrEqual(l[v - 1]);
+  });
+
+  it("tanda pucat (watermark, latar pengaman, paraf pensil) tidak ikut hilang", () => {
+    // Kertas 232 berderau, watermark ~212, pensil ~200: kontras ke kertas harus
+    // tetap sebagian besar (dulu watermark jadi 248-254, nyaris hilang).
+    const l = paperLevels(scanLike(232, 6))!;
+    expect(l).not.toBeNull();
+    expect(255 - l[212]).toBeGreaterThanOrEqual(14); // aslinya 20
+    expect(255 - l[200]).toBeGreaterThanOrEqual(25); // aslinya 32
   });
 
   it("tidak mengubah halaman yang kertasnya sudah putih", () => {

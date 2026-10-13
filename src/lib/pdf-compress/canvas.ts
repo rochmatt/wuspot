@@ -200,11 +200,14 @@ export function paperLevels(stats: LumaStats): Uint8Array | null {
   let mode = 128;
   for (let v = 129; v < 256; v++) if (smooth[v] > smooth[mode]) mode = v;
 
-  // Lebar setengah puncak di sisi gelap ~ 1,18 sigma derau kertas;
-  // titik putih ~2,4 sigma di bawah puncak menelan hampir semua bintik.
+  // Lebar setengah puncak di sisi gelap ~ 1,18 sigma derau kertas. Titik
+  // putih ditaruh selebar itu di bawah puncak: sebagian besar bintik kertas
+  // jadi putih, tapi tanda yang pucat (watermark, latar pengaman ijazah,
+  // paraf pensil) tetap kelihatan. Versi sebelumnya (2x lebar) ikut menghapus
+  // tanda-tanda itu.
   let edge = mode;
   while (edge > 0 && smooth[edge] > smooth[mode] / 2) edge--;
-  const white = mode - Math.max(2, Math.round(2 * (mode - edge)));
+  const white = mode - Math.max(2, mode - edge);
   if (white >= 245 || white < 120) return null;
 
   let paper = 0;

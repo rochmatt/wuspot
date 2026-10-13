@@ -7,7 +7,7 @@ import type { CompressResult } from "@/lib/pdf-compress/types";
 import { BeresStamp } from "@/components/site/Stamp";
 import type { FileInfo } from "./KompresTool";
 import type { KompresStatus, ModeChoice } from "./useKompres";
-import { STAGE_LABEL, casualNote, isVerdictNote, kbLabel, levelName, modeLabel } from "./labels";
+import { STAGE_LABEL, isVerdictNote, kbLabel, levelName, modeLabel } from "./labels";
 import {
   ArrowRight,
   DownloadIcon,
@@ -371,13 +371,22 @@ function ErrorState({ status, onPickFile }: Props & { status: Extract<KompresSta
 
 /* ---------- selesai ---------- */
 
-function strategyNote(r: CompressResult): string {
+/**
+ * Satu kalimat tentang apa yang dilakukan pada file. `null` bila mesin sudah
+ * menjelaskannya sendiri (mis. "teks sekarang berupa gambar").
+ */
+function strategyNote(r: CompressResult): string | null {
   if (r.strategy === "original")
     return "File ini sudah ringkas dari sananya, jadi kami kembalikan apa adanya. Isinya nggak diubah sama sekali.";
   if (r.strategy === "optimize") return "Isinya nggak diubah, cuma struktur PDF-nya yang dirapikan.";
-  if (!r.textPreserved)
-    return "Teks di PDF ini sekarang berupa gambar: tetap terbaca, tapi nggak bisa diblok, disalin, atau dicari.";
-  return "Teksnya tetap teks (masih bisa disalin). Yang dikecilkan cuma gambar di dalamnya.";
+  if (r.strategy === "rasterize") {
+    return r.notes.some((n) => n.startsWith("Teks di PDF ini"))
+      ? null
+      : "Tiap halaman disimpan ulang sebagai gambar JPG yang lebih ringan.";
+  }
+  return r.textPreserved
+    ? "Teksnya tetap teks (masih bisa disalin). Yang dikecilkan cuma gambar di dalamnya."
+    : "Gambar hasil scan di dalamnya dikecilkan. Tata letak halamannya tetap sama.";
 }
 
 /**
@@ -441,10 +450,10 @@ function Done({
     }
   };
 
-  const engineNotes = r.notes.map(casualNote);
+  const engineNotes = r.notes;
   // Catatan mesin lebih spesifik; catatan "apa adanya" kami hanya dipakai kalau mesin diam.
-  const notes =
-    r.strategy === "original" && engineNotes.length > 0 ? engineNotes : [strategyNote(r), ...engineNotes];
+  const lead = r.strategy === "original" && engineNotes.length > 0 ? null : strategyNote(r);
+  const notes = lead ? [lead, ...engineNotes] : engineNotes;
   // Di hasil "belum tercapai", vonis dan tips sudah ditulis di atas: jangan diulang.
   const partialNotes = engineNotes.filter((n) => !isVerdictNote(n));
   const tips = tipsFor(r.pageCount, grayscale);

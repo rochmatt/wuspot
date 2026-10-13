@@ -13,6 +13,18 @@ export interface DocInfo {
   encrypted?: boolean;
   /** Ada tanda tangan digital (mis. e-meterai) yang akan batal bila file diubah. */
   hasSignatures?: boolean;
+  /**
+   * Formulir XFA (mis. e-Form pajak). Isi formulirnya tidak ada di halaman,
+   * jadi halaman tidak boleh diubah jadi gambar (yang tergambar hanya
+   * tulisan "Please wait...").
+   */
+  isXfa?: boolean;
+  /** Ada kolom isian formulir (AcroForm) yang masih bisa diisi/diubah. */
+  hasForm?: boolean;
+  /** Ada daftar isi/bookmark. */
+  hasOutline?: boolean;
+  /** Ada file lampiran di dalam PDF. */
+  hasAttachments?: boolean;
 }
 
 export async function inspectDocument(
@@ -41,7 +53,31 @@ export async function inspectDocument(
     ...(meta.title ? { title: meta.title } : {}),
     encrypted: meta.encrypted,
     hasSignatures: meta.hasSignatures,
+    isXfa: meta.isXfa,
+    hasForm: meta.hasForm,
+    hasOutline: await hasOutline(doc),
+    hasAttachments: await hasAttachments(doc),
   };
+}
+
+async function hasOutline(doc: PDFDocumentProxy): Promise<boolean> {
+  try {
+    const outline = await doc.getOutline();
+    return Array.isArray(outline) && outline.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+async function hasAttachments(doc: PDFDocumentProxy): Promise<boolean> {
+  try {
+    // pdf.js 6 mengembalikan Map; versi lama objek biasa.
+    const files: unknown = await doc.getAttachments();
+    if (files instanceof Map) return files.size > 0;
+    return files !== null && typeof files === "object" && Object.keys(files).length > 0;
+  } catch {
+    return false;
+  }
 }
 
 interface TextChunk {
@@ -74,9 +110,15 @@ async function pageHasText(page: PDFPageProxy): Promise<boolean> {
   }
 }
 
-async function readMeta(
-  doc: PDFDocumentProxy,
-): Promise<{ title?: string; encrypted: boolean; hasSignatures: boolean }> {
+interface MetaFlags {
+  title?: string;
+  encrypted: boolean;
+  hasSignatures: boolean;
+  isXfa: boolean;
+  hasForm: boolean;
+}
+
+async function readMeta(doc: PDFDocumentProxy): Promise<MetaFlags> {
   try {
     const { info, metadata } = await doc.getMetadata();
     const rec = (info ?? {}) as Record<string, unknown>;
@@ -92,10 +134,12 @@ async function readMeta(
       title,
       encrypted: typeof rec.EncryptFilterName === "string" && rec.EncryptFilterName !== "",
       hasSignatures: rec.IsSignaturesPresent === true,
+      isXfa: rec.IsXFAPresent === true,
+      hasForm: rec.IsAcroFormPresent === true,
     };
   } catch {
     // Metadata rusak tidak penting untuk kompresi.
-    return { encrypted: false, hasSignatures: false };
+    return { encrypted: false, hasSignatures: false, isXfa: false, hasForm: false };
   }
 }
 

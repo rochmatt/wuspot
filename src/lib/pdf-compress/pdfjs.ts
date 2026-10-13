@@ -20,6 +20,7 @@ export async function getPdfjs(): Promise<PdfjsModule> {
     modulePromise = import("pdfjs-dist/legacy/build/pdf.mjs").then(
       (mod) => {
         mod.GlobalWorkerOptions.workerSrc = WORKER_SRC;
+        releaseModuleErrorStack(mod);
         return mod;
       },
       (err: unknown) => {
@@ -31,6 +32,33 @@ export async function getPdfjs(): Promise<PdfjsModule> {
     );
   }
   return modulePromise;
+}
+
+/**
+ * pdf.js membuat `new Error()` di level modul (prototipe BaseException). V8
+ * menyimpan jejak stack-nya yang belum diformat, termasuk frame async beserta
+ * objek-objeknya. Kalau modul ini pertama kali dimuat di tengah kompresi, salinan
+ * file pertama ikut tertahan sampai tab ditutup (terukur ~55 MB untuk scan 52 MB).
+ * Membaca `.stack` sekali membuat V8 menyimpannya sebagai teks dan melepas
+ * referensinya.
+ */
+function releaseModuleErrorStack(mod: PdfjsModule): void {
+  try {
+    const base: unknown = Object.getPrototypeOf(mod.PasswordException.prototype);
+    if (base instanceof Error) void base.stack;
+  } catch {
+    // Struktur internal pdf.js berubah: tidak fatal, hanya memori.
+  }
+}
+
+/** Dokumen punya layer (optional content) yang bisa disembunyikan. */
+export async function hasOptionalContent(doc: PDFDocumentProxy): Promise<boolean> {
+  try {
+    const config = await doc.getOptionalContentConfig();
+    return config.getOrder() !== null;
+  } catch {
+    return true; // ragu: anggap ada, supaya tidak menulis ulang dokumen sembarangan
+  }
 }
 
 /**

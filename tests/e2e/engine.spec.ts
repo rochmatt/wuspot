@@ -9,7 +9,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } fr
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { test as base, expect, type Page } from "@playwright/test";
-import { PDFDocument } from "pdf-lib";
+import { PDFArray, PDFDict, PDFDocument, PDFName, PDFRawStream } from "pdf-lib";
 import type { HarnessOptions, HarnessResponse } from "../../src/app/uji-mesin/harness";
 import type { CompressMode } from "../../src/lib/pdf-compress/types";
 
@@ -521,5 +521,105 @@ test.describe("mesin kompres", () => {
     // Halaman masih sehat setelah pembatalan.
     const again = await compress(readFixture("tiny.pdf"), { mode: { kind: "level", level: "ringan" } });
     expect(again.ok).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Kasus sulit dari review (tests/fixtures/make-tricky.py)
+// ---------------------------------------------------------------------------
+
+async function compressOk(compress: Compress, fixture: string, options: HarnessOptions) {
+  const res = await compress(readFixture(fixture), { fileName: fixture, ...options });
+  if (!res.ok) throw new Error(`Mesin gagal (${res.code}): ${res.message}`);
+  const bytes = new Uint8Array(Buffer.from(res.bytesBase64, "base64"));
+  const label = `${fixture.replace(/\.pdf$/, "")}__${modeLabel(options.mode)}`;
+  writeFileSync(join(OUTPUT_DIR, `${label}.pdf`), bytes);
+  test.info().annotations.push({
+    type: "hasil",
+    description: `${res.result.strategy} ${(res.result.outputBytes / KB).toFixed(1)} KB — ${res.result.notes.join(" | ")}`,
+  });
+  return { result: res.result, bytes, file: join(OUTPUT_DIR, `${label}.pdf`) };
+}
+
+/** Ruang warna & filter tiap gambar di halaman pertama. */
+async function pageImages(bytes: Uint8Array): Promise<Array<{ name: string; colorSpace: string; filter: string }>> {
+  const doc = await PDFDocument.load(bytes, { updateMetadata: false });
+  const resources = doc.getPages()[0].node.Resources();
+  const xobjects = resources?.lookup(PDFName.of("XObject"), PDFDict);
+  const out: Array<{ name: string; colorSpace: string; filter: string }> = [];
+  for (const [key, ref] of xobjects?.entries() ?? []) {
+    const stream = doc.context.lookup(ref);
+    if (!(stream instanceof PDFRawStream)) continue;
+    const cs = stream.dict.lookup(PDFName.of("ColorSpace"));
+    const family = cs instanceof PDFArray ? String(cs.get(0)) : String(cs);
+    out.push({ name: key.asString(), colorSpace: family, filter: String(stream.dict.get(PDFName.of("Filter"))) });
+  }
+  return out;
+}
+
+test.describe("kasus sulit", () => {
+  test.skip(!existsSync(join(FIXTURE_DIR, "tricky-xfa.pdf")), "Fixture belum ada: jalankan `npm run fixtures`.");
+
+  test("formulir XFA tidak pernah diubah jadi gambar", async ({ compress }) => {
+    const kuat = await compressOk(compress, "tricky-xfa.pdf", { mode: { kind: "level", level: "kuat" } });
+    expect(kuat.result.strategy).not.toBe("rasterize");
+    const target = await compressOk(compress, "tricky-xfa.pdf", { mode: { kind: "target", targetBytes: 100 * KB } });
+    expect(target.result.strategy).not.toBe("rasterize");
+    if (!target.result.targetMet) expect(target.result.notes.some((n) => /XFA/.test(n))).toBe(true);
+    // XFA-nya tetap ada di file hasil.
+    const doc = await PDFDocument.load(target.bytes, { updateMetadata: false });
+    expect(doc.catalog.lookup(PDFName.of("AcroForm"), PDFDict).has(PDFName.of("XFA"))).toBe(true);
+  });
+
+  test("PDF Fast Web View berproteksi: teks & metadata tetap", async ({ compress }) => {
+    const { result, file } = await compressOk(compress, "tricky-linear-protected.pdf", {
+      mode: { kind: "target", targetBytes: 200 * KB },
+    });
+    expect(result.targetMet).toBe(true);
+    expect(result.strategy).toBe("images");
+    expect(result.textPreserved).toBe(true);
+    const { stdout } = await run("pdfinfo", [file]);
+    expect(stdout).toMatch(/Author:\s+Budi Santoso/);
+    expect(stdout).toMatch(/Encrypted:\s+no/);
+  });
+
+  test("rasterize memberi tahu daftar isi, tautan, dan lampiran yang hilang", async ({ compress }) => {
+    const { result } = await compressOk(compress, "tricky-outline.pdf", { mode: { kind: "target", targetBytes: 200 * KB } });
+    expect(result.strategy).toBe("rasterize");
+    const lost = result.notes.find((n) => /nggak ikut ke file hasil/.test(n)) ?? "";
+    expect(lost).toMatch(/daftar isi/i);
+    expect(lost).toMatch(/tautan/i);
+    expect(lost).toMatch(/lampiran/i);
+  });
+
+  test("tingkat Ringan tidak bilang 'sudah ringkas' untuk gambar yang belum bisa dikecilkan", async ({ compress }) => {
+    const { result } = await compressOk(compress, "tricky-outline.pdf", { mode: { kind: "level", level: "ringan" } });
+    expect(result.notes.join(" ")).not.toMatch(/sudah cukup ringkas/);
+    expect(result.notes.join(" ")).toMatch(/Kuat/);
+  });
+
+  test("isian formulir dijaga di tingkat Sedang, dan disebut kalau hilang di Kuat", async ({ compress }) => {
+    const sedang = await compressOk(compress, "tricky-form.pdf", { mode: { kind: "level", level: "sedang" } });
+    expect(sedang.result.strategy).not.toBe("rasterize");
+    const kuat = await compressOk(compress, "tricky-form.pdf", { mode: { kind: "level", level: "kuat" } });
+    if (kuat.result.strategy === "rasterize") {
+      expect(kuat.result.notes.some((n) => /isian formulir/.test(n))).toBe(true);
+    }
+  });
+
+  test("CalGray bergamma 1 tidak disentuh; CalRGB tetap CalRGB", async ({ compress }) => {
+    const { result, bytes } = await compressOk(compress, "tricky-calibrated.pdf", { mode: { kind: "level", level: "ringan" } });
+    expect(result.strategy).toBe("images");
+    const images = await pageImages(bytes);
+    const gray = images.find((i) => i.name === "/G");
+    const color = images.find((i) => i.name === "/C");
+    expect(gray).toMatchObject({ colorSpace: "/CalGray", filter: "/FlateDecode" });
+    expect(color).toMatchObject({ colorSpace: "/CalRGB", filter: "/DCTDecode" });
+  });
+
+  test("tingkat Ringan tidak mengganti file demi hemat beberapa KB", async ({ compress }) => {
+    const { result } = await compressOk(compress, "text-12p.pdf", { mode: { kind: "level", level: "ringan" } });
+    expect(result.strategy).toBe("original");
+    expect(result.notes.join(" ")).toMatch(/Cuma bisa hemat/);
   });
 });

@@ -139,6 +139,7 @@ describe("buildRasterPdf + estimateRasterPdfBytes", () => {
         widthPt: s.widthPt,
         heightPt: s.heightPt,
       })),
+      hasLinks: false,
     };
     const title = "Transkrip Nilai — Universitas Contoh";
     const bytes = await buildRasterPdf(jpegs, master, { title });
@@ -178,7 +179,7 @@ describe("buildRasterPdf + estimateRasterPdfBytes", () => {
   });
 
   it("menolak jumlah gambar yang tidak sama dengan jumlah halaman", async () => {
-    const master: RasterMaster = { dpi: 72, pages: [] };
+    const master: RasterMaster = { dpi: 72, pages: [], hasLinks: false };
     await expect(buildRasterPdf([noisyJpeg(8, 8, 1)], master, {})).rejects.toThrow();
   });
 });

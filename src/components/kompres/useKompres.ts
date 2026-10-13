@@ -79,7 +79,7 @@ export function loadEngine(): Promise<Engine> {
 }
 
 /**
- * Mesin (±185 KB) baru dimuat saat pengguna menunjukkan niat: menyentuh atau
+ * Mesin (±185 KB, plus pembaca PDF) baru dimuat saat pengguna menunjukkan niat: menyentuh atau
  * memfokuskan tombol "Pilih file", menyeret file, atau sudah memilih file.
  * Pembaca yang cuma membaca halaman tidak ikut mengunduhnya. Di mode hemat
  * data / koneksi 2G–3G, tunggu sampai file benar-benar dipilih.
@@ -89,7 +89,11 @@ export function warmEngine(force = false) {
     const c = (navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } }).connection;
     if (c?.saveData || /(^|-)(2g|3g)$/.test(c?.effectiveType ?? "")) return;
   }
-  void loadEngine().catch(() => {});
+  // warmUp ikut memuat pdf.js sekarang, di luar alur kompres yang memegang isi
+  // file (lihat src/lib/pdf-compress/pdfjs.ts soal memori).
+  void loadEngine()
+    .then((engine) => engine.warmUp())
+    .catch(() => {});
 }
 
 const MESSAGES: Record<CompressErrorCode | "unknown", string> = {

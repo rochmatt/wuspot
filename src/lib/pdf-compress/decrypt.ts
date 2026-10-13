@@ -31,6 +31,7 @@ import {
   PDFString,
   PDFXRefStreamParser,
 } from "pdf-lib";
+import "./pdflib-patches";
 
 // ---------------------------------------------------------------------------
 // Primitif kripto. MD5 & RC4 tidak ada di WebCrypto, jadi ditulis sendiri;
@@ -239,8 +240,68 @@ function padPassword(pw: Uint8Array): Uint8Array {
 }
 
 function stringBytes(obj: PDFObject | undefined): Uint8Array | null {
-  if (obj instanceof PDFString || obj instanceof PDFHexString) return obj.asBytes();
+  if (obj instanceof PDFString || obj instanceof PDFHexString) return pdfStringBytes(obj);
   return null;
+}
+
+/**
+ * Byte mentah string PDF menurut ISO 32000 7.3.4. `asBytes()` milik pdf-lib
+ * tidak mengabaikan spasi/baris baru di string hex dan salah membaca
+ * backslash + CRLF di string literal. Untuk teks biasa itu sepele, tapi pada
+ * data terenkripsi satu byte meleset membuat seluruh hasil dekripsinya sampah.
+ */
+export function pdfStringBytes(obj: PDFString | PDFHexString): Uint8Array {
+  const raw = obj.asString();
+  if (obj instanceof PDFHexString) {
+    const hex = raw.replace(/[^0-9a-fA-F]/g, "");
+    const even = hex.length % 2 === 1 ? `${hex}0` : hex;
+    const out = new Uint8Array(even.length / 2);
+    for (let i = 0; i < out.length; i++) out[i] = parseInt(even.substr(i * 2, 2), 16);
+    return out;
+  }
+  const out: number[] = [];
+  for (let i = 0; i < raw.length; i++) {
+    const c = raw.charCodeAt(i);
+    if (c === 0x0d) {
+      // Akhir baris mentah di dalam string literal dibaca sebagai satu LF.
+      out.push(0x0a);
+      if (raw.charCodeAt(i + 1) === 0x0a) i++;
+      continue;
+    }
+    if (c !== 0x5c) {
+      out.push(c & 0xff);
+      continue;
+    }
+    i++;
+    if (i >= raw.length) break;
+    const e = raw.charCodeAt(i);
+    if (e >= 0x30 && e <= 0x37) {
+      let value = e - 0x30;
+      for (let k = 0; k < 2; k++) {
+        const d = raw.charCodeAt(i + 1);
+        if (!(d >= 0x30 && d <= 0x37)) break;
+        value = value * 8 + (d - 0x30);
+        i++;
+      }
+      out.push(value & 0xff);
+      continue;
+    }
+    switch (e) {
+      case 0x6e: out.push(0x0a); break; // \n
+      case 0x72: out.push(0x0d); break; // \r
+      case 0x74: out.push(0x09); break; // \t
+      case 0x62: out.push(0x08); break; // \b
+      case 0x66: out.push(0x0c); break; // \f
+      case 0x0d: // backslash + akhir baris = sambungan, tidak menghasilkan byte
+        if (raw.charCodeAt(i + 1) === 0x0a) i++;
+        break;
+      case 0x0a:
+        break;
+      default:
+        out.push(e & 0xff); // \( \) \\ dan escape tak dikenal: backslash diabaikan
+    }
+  }
+  return new Uint8Array(out);
 }
 
 function numberOf(obj: PDFObject | undefined): number | undefined {
@@ -449,7 +510,7 @@ function toHex(bytes: Uint8Array): string {
 /** Dekripsi semua string di dalam objek (rekursif). Mengembalikan objek pengganti. */
 async function decryptStrings(handler: Handler, ref: PDFRef, obj: PDFObject): Promise<PDFObject> {
   if (obj instanceof PDFString || obj instanceof PDFHexString) {
-    const plain = await decryptData(handler, handler.string, ref, obj.asBytes());
+    const plain = await decryptData(handler, handler.string, ref, pdfStringBytes(obj));
     return PDFHexString.of(toHex(plain));
   }
   if (obj instanceof PDFDict) {
@@ -492,6 +553,12 @@ async function decryptStream(handler: Handler, ref: PDFRef, stream: PDFRawStream
 
 // ---------------------------------------------------------------------------
 // Parser
+
+const YIELD_AFTER_BYTES = 1024 * 1024;
+
+function yieldToBrowser(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
 
 const ENDOBJ = [0x65, 0x6e, 0x64, 0x6f, 0x62, 0x6a];
 
@@ -561,6 +628,9 @@ export async function loadDecrypted(bytes: Uint8Array, password = ""): Promise<P
       }
       if (obj instanceof PDFRawStream) {
         const plain = await decryptStream(handler, ref, obj);
+        // Dekripsi berjalan di main thread; beri jeda setelah stream besar supaya
+        // progres & tombol Batal tetap responsif di HP.
+        if (obj.contents.length > YIELD_AFTER_BYTES) await yieldToBrowser();
         if (plain.dict.get(N.Type) === N.ObjStm) {
           // Objek di dalam object stream tidak dienkripsi terpisah.
           await PDFObjectStreamParser.forStream(plain, parser.shouldWaitForTick).parseIntoContext();

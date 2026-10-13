@@ -16,6 +16,7 @@ import {
   encodeImages,
   estimateWithImages,
   findImageCandidates,
+  ineligibleImageBytes,
   type EncodedImage,
   type ImageCandidate,
 } from "./images";
@@ -31,11 +32,12 @@ import {
   type RasterStep,
 } from "./ladder";
 import { loadEditable, optimizeStructure, savePdf } from "./optimize";
-import { closeDocument, openDocument, rewriteDocument } from "./pdfjs";
+import { closeDocument, getPdfjs, hasOptionalContent, openDocument, rewriteDocument } from "./pdfjs";
 import {
   buildRasterPdf,
   encodeRasterPages,
   estimateRasterPdfBytes,
+  rasterLowerBound,
   renderMasters,
   type RasterMaster,
 } from "./rasterize";
@@ -52,6 +54,19 @@ import {
 } from "./types";
 
 export * from "./types";
+
+/**
+ * Muat pdf.js lebih awal (mis. saat pengguna memilih file). Selain membuat
+ * tombol Kompres terasa instan, modul besar itu jadi tidak dievaluasi di
+ * dalam rantai pemanggilan yang memegang isi file (lihat pdfjs.ts).
+ */
+export async function warmUp(): Promise<void> {
+  try {
+    await getPdfjs();
+  } catch {
+    // Gagal di sini tidak apa-apa; kompresi akan mencoba lagi dan melapor.
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Progres: rasio tidak pernah mundur, walau tahap berganti.
@@ -149,6 +164,12 @@ interface Job {
   produced: number;
   /** Rasterize sudah dicoba (hasilnya dipakai atau tidak). */
   rasterTried: boolean;
+  /** Byte gambar yang tidak bisa diolah jalur "images" (CMYK, JPEG 2000, dst.). */
+  ineligibleBytes: number;
+  /** Halaman yang dirasterisasi punya link/lampiran (hilang di hasil). */
+  lostLinks: boolean;
+  /** Mode level: hasil terbaik terlalu sedikit hematnya, jadi file asli dipakai. */
+  smallGain: number | null;
 }
 
 interface Outcome {
@@ -202,6 +223,9 @@ export async function compressPdf(
       skipped: [],
       produced: 0,
       rasterTried: false,
+      ineligibleBytes: 0,
+      lostLinks: false,
+      smallGain: null,
     };
 
     const final =
@@ -289,7 +313,11 @@ async function prepareEditable(job: Job): Promise<void> {
   }
   throwIfAborted(job.signal);
   progress.report("menganalisis", at(SPAN_PREPARE, 0.5), "Membaca ulang struktur PDF");
-  const rewritten = await rewriteDocument(await job.pdfjs.get());
+  const pdf = await job.pdfjs.get();
+  // Penulisan ulang pdf.js membuang /OCProperties: layer yang tadinya
+  // tersembunyi (mis. "DRAFT") jadi tampil. Lebih aman lewat rasterize.
+  if (await hasOptionalContent(pdf)) return;
+  const rewritten = await rewriteDocument(pdf);
   throwIfAborted(job.signal);
   if (!rewritten) return;
   const doc = await loadEditable(rewritten);
@@ -305,33 +333,56 @@ async function runTarget(job: Job, targetBytes: number): Promise<Final> {
   // Sudah muat: kembalikan apa adanya (tanda tangan digital & form tetap utuh).
   if (job.input.length <= target) return { outcome: original, met: true };
 
-  const tried: Outcome[] = [original];
-  const optimized = await guard(job, () => stageOptimize(job));
-  if (optimized) {
-    tried.push(optimized);
-    if (optimized.bytes.length <= target) return { outcome: optimized, met: true };
+  const text = await textKeepingTarget(job, target);
+  if (text.met) return { outcome: text.best, met: true };
+  let best = smaller(original, text.best);
 
-    const images = await guard(job, () =>
-      stageImagesTarget(job, optimized.bytes.length, target, { from: SPAN_OPTIMIZE.to, to: IMAGES_END_WITH_RASTER }),
-    );
-    if (images) {
-      tried.push(images.outcome);
-      if (images.met) return { outcome: images.outcome, met: true };
+  // Tahap pdf-lib sudah selesai: lepas dokumennya (salinan penuh file) sebelum
+  // rasterize, yang paling boros memori.
+  job.editable = null;
+  if (rasterWorthTrying(job, best)) {
+    const raster = await guard(job, () => stageRasterTarget(job, target));
+    if (raster) {
+      if (raster.met) return { outcome: raster.outcome, met: true };
+      best = smaller(best, raster.outcome);
     }
   }
-
-  const raster = await guard(job, () => stageRasterTarget(job, target));
-  if (raster) {
-    tried.push(raster.outcome);
-    if (raster.met) return { outcome: raster.outcome, met: true };
-  }
-
-  return { outcome: smallest(tried), met: false };
+  return { outcome: best, met: false };
 }
 
-/** Hasil terkecil; bila seri, yang lebih awal di daftar (lebih menjaga teks) menang. */
-function smallest(list: Outcome[]): Outcome {
-  return list.reduce((best, o) => (o.bytes.length < best.bytes.length ? o : best));
+/**
+ * Optimize lalu gambar, dua-duanya menjaga teks. Dipisah supaya byte hasil
+ * antara (mis. hasil optimize yang kalah kecil) lepas dari memori begitu
+ * fungsi ini selesai.
+ */
+async function textKeepingTarget(job: Job, target: number): Promise<{ best: Outcome; met: boolean }> {
+  let best: Outcome = { bytes: job.input, strategy: "original", settings: {} };
+  const optimized = await guard(job, () => stageOptimize(job));
+  if (!optimized) return { best, met: false };
+  best = smaller(best, optimized);
+  if (optimized.bytes.length <= target) return { best: optimized, met: true };
+
+  const images = await guard(job, () =>
+    stageImagesTarget(job, optimized.bytes.length, target, { from: SPAN_OPTIMIZE.to, to: IMAGES_END_WITH_RASTER }),
+  );
+  if (!images) return { best, met: false };
+  if (images.met) return { best: images.outcome, met: true };
+  return { best: smaller(best, images.outcome), met: false };
+}
+
+/**
+ * Rasterize tidak dicoba bila tidak mungkin menolong: formulir XFA (yang
+ * tergambar hanya "Please wait..."), atau hasil yang ada sudah lebih kecil
+ * dari ukuran minimal PDF berisi halaman-halaman JPG.
+ */
+function rasterWorthTrying(job: Job, best: Outcome): boolean {
+  if (job.info.isXfa) return false;
+  return best.bytes.length > rasterLowerBound(job.info.pageCount);
+}
+
+/** Yang lebih kecil; bila sama, `a` (yang lebih menjaga teks) menang. */
+function smaller(a: Outcome, b: Outcome): Outcome {
+  return b.bytes.length < a.bytes.length ? b : a;
 }
 
 // ---------------------------------------------------------------------------
@@ -344,34 +395,37 @@ function smallest(list: Outcome[]): Outcome {
 const RASTER_MIN_GAIN_WITH_TEXT = 0.8;
 /** Perkiraan kasar ukuran minimal satu halaman yang dirasterisasi. */
 const RASTER_MIN_PAGE_BYTES = 16 * 1024;
+/**
+ * Mode level: file asli hanya diganti bila hematnya terasa. Mengganti file
+ * demi beberapa byte tidak ada gunanya, dan bisa membatalkan tanda tangan
+ * digital (e-meterai) — untuk file bertanda tangan, syaratnya lebih tinggi.
+ */
+const MIN_GAIN_BYTES = 8 * 1024;
+const MIN_GAIN_RATIO = 0.05;
+const MIN_GAIN_RATIO_SIGNED = 0.2;
 
 async function runLevel(job: Job, level: CompressLevel): Promise<Final> {
   const preset = LEVEL_PRESETS[level];
   const original: Outcome = { bytes: job.input, strategy: "original", settings: {} };
-  const textKeeping: Outcome[] = [];
+  const { info } = job;
 
-  const rasterAllowed = preset.raster !== null && (preset.rasterizeWithText || !job.info.hasAnyText);
+  // Teks dan isian formulir sama-sama hilang kalau halaman diubah jadi gambar.
+  const keepsSomething = info.hasAnyText || info.hasForm === true;
+  const rasterAllowed = preset.raster !== null && !info.isXfa && (preset.rasterizeWithText || !keepsSomething);
   const imagesEnd = rasterAllowed ? IMAGES_END_WITH_RASTER : WORK_END;
 
-  const optimized = await guard(job, () => stageOptimize(job));
-  if (optimized) {
-    textKeeping.push(optimized);
-    const images = await guard(job, () =>
-      stageImagesSingle(job, optimized.bytes.length, preset.image, { from: SPAN_OPTIMIZE.to, to: imagesEnd }),
-    );
-    if (images) textKeeping.push(images);
-  }
-
-  const bestText = textKeeping.length > 0 ? smallest(textKeeping) : null;
+  const bestText = await textKeepingLevel(job, preset.image, imagesEnd);
+  // Tahap pdf-lib selesai: lepas dokumennya sebelum rasterize.
+  job.editable = null;
   let best = bestText;
 
-  if (preset.raster && rasterAllowed && !rasterPointless(job, bestText)) {
+  if (preset.raster && rasterAllowed && !rasterPointless(job, bestText, keepsSomething)) {
     const step = preset.raster;
     const raster = await guard(job, () => stageRasterSingle(job, step));
     if (raster) {
       const worthIt =
         !bestText ||
-        (job.info.hasAnyText
+        (keepsSomething
           ? raster.bytes.length < bestText.bytes.length * RASTER_MIN_GAIN_WITH_TEXT
           : raster.bytes.length < bestText.bytes.length);
       if (worthIt) best = raster;
@@ -379,12 +433,30 @@ async function runLevel(job: Job, level: CompressLevel): Promise<Final> {
   }
 
   if (!best || best.bytes.length >= job.input.length) return { outcome: original, met: null };
+  const saved = job.input.length - best.bytes.length;
+  const minRatio = info.hasSignatures ? MIN_GAIN_RATIO_SIGNED : MIN_GAIN_RATIO;
+  if (saved < MIN_GAIN_BYTES || saved < job.input.length * minRatio) {
+    job.smallGain = saved;
+    return { outcome: original, met: null };
+  }
   return { outcome: best, met: null };
 }
 
-/** Rasterize tidak mungkin menang bila hasil berteks sudah lebih kecil dari halaman-halaman JPG minimal. */
-function rasterPointless(job: Job, bestText: Outcome | null): boolean {
-  if (!bestText || !job.info.hasAnyText) return false;
+/** Optimize lalu gambar (menjaga teks); yang terkecil, atau null. */
+async function textKeepingLevel(job: Job, step: ImageStep, imagesEnd: number): Promise<Outcome | null> {
+  const optimized = await guard(job, () => stageOptimize(job));
+  if (!optimized) return null;
+  const images = await guard(job, () =>
+    stageImagesSingle(job, optimized.bytes.length, step, { from: SPAN_OPTIMIZE.to, to: imagesEnd }),
+  );
+  return images ? smaller(optimized, images) : optimized;
+}
+
+/** Rasterize tidak mungkin menang bila hasil yang menjaga isi sudah cukup kecil. */
+function rasterPointless(job: Job, bestText: Outcome | null, keepsSomething: boolean): boolean {
+  if (!bestText) return false;
+  if (bestText.bytes.length <= rasterLowerBound(job.info.pageCount)) return true;
+  if (!keepsSomething) return false;
   return bestText.bytes.length * RASTER_MIN_GAIN_WITH_TEXT <= job.info.pageCount * RASTER_MIN_PAGE_BYTES;
 }
 
@@ -412,6 +484,15 @@ async function stageOptimize(job: Job): Promise<Outcome | null> {
 
 // ---------------------------------------------------------------------------
 // Tahap: images
+
+/**
+ * Keterangan progres. Di mode target tiap percobaan kualitas mengulang hitungan
+ * gambar/halaman, jadi nomor percobaannya ikut ditulis supaya tidak terlihat
+ * seperti mengulang dari awal.
+ */
+function trialLabel(trial: number, unit: "Gambar" | "Halaman"): (n: number, total: number) => string {
+  return (n, total) => (trial > 0 ? `Percobaan ${trial + 1} · ${unit.toLowerCase()} ${n} dari ${total}` : `${unit} ${n} dari ${total}`);
+}
 
 /**
  * Percobaan kompres gambar pada beberapa langkah. Byte hasil encode disimpan
@@ -444,14 +525,26 @@ class ImageTrials {
     const hit = this.encoded.get(index);
     if (hit) return hit;
     const { job } = this;
+    const trial = this.trials;
     const span = this.target === null ? this.span : trialSpan(this.span, this.trials++);
+    const label = trialLabel(trial, "Gambar");
     const total = this.candidates.length;
-    job.progress.report("mengompres", span.from, `Gambar 1 dari ${total}`);
-    const result = await encodeImages(this.doc, this.candidates, this.steps[index], job.grayscale, {
-      signal: job.signal,
-      onImage: (done, all) =>
-        job.progress.report("mengompres", at(span, done / all), `Gambar ${Math.min(done + 1, all)} dari ${all}`),
-    });
+    job.progress.report("mengompres", span.from, label(1, total));
+    let result: EncodedImage[];
+    try {
+      result = await encodeImages(this.doc, this.candidates, this.steps[index], job.grayscale, {
+        signal: job.signal,
+        onImage: (done, all) => job.progress.report("mengompres", at(span, done / all), label(Math.min(done + 1, all), all)),
+      });
+    } catch (err) {
+      // Memori habis di satu langkah (biasanya yang resolusinya paling besar)
+      // bukan alasan menyerah: langkah yang lebih kecil masih bisa dicoba.
+      if (!isOutOfMemory(err)) throw err;
+      job.skipped.push(err);
+      this.estimates.set(index, Number.POSITIVE_INFINITY);
+      this.encoded.set(index, []);
+      return [];
+    }
     this.estimates.set(index, estimateWithImages(this.baseBytes, this.candidates, result));
     this.encoded.set(index, result);
     this.prune(index);
@@ -477,7 +570,7 @@ class ImageTrials {
     if (encoded.length === 0) return null;
     const { job } = this;
     throwIfAborted(job.signal);
-    job.progress.report("menyusun", job.progress.ratio, "Menyusun PDF");
+    job.progress.report("mengompres", job.progress.ratio, "Memeriksa ukuran hasil");
     const undo = applyEncodedImages(this.doc, encoded);
     try {
       const bytes = await savePdf(this.doc, { title: job.info.title });
@@ -498,6 +591,7 @@ async function stageImagesTarget(
   const doc = job.editable;
   if (!doc) return null;
   const candidates = findImageCandidates(doc);
+  job.ineligibleBytes = ineligibleImageBytes(doc, candidates);
   if (candidates.length === 0) return null;
 
   const trials = new ImageTrials(job, doc, candidates, IMAGE_LADDER, baseBytes, span, target);
@@ -523,6 +617,7 @@ async function stageImagesSingle(job: Job, baseBytes: number, step: ImageStep, s
   const doc = job.editable;
   if (!doc) return null;
   const candidates = findImageCandidates(doc);
+  job.ineligibleBytes = ineligibleImageBytes(doc, candidates);
   if (candidates.length === 0) return null;
   const trials = new ImageTrials(job, doc, candidates, [step], baseBytes, span, null);
   return trials.build(0);
@@ -555,13 +650,14 @@ class RasterTrials {
     const hit = this.encoded.get(index);
     if (hit) return hit;
     const { job } = this;
+    const trial = this.trials;
     const span = this.target === null ? this.span : trialSpan(this.span, this.trials++);
+    const label = trialLabel(trial, "Halaman");
     const total = this.master.pages.length;
-    job.progress.report("mengompres", span.from, `Halaman 1 dari ${total}`);
+    job.progress.report("mengompres", span.from, label(1, total));
     const pages = await encodeRasterPages(this.master, this.steps[index], job.grayscale, {
       signal: job.signal,
-      onPage: (done, all) =>
-        job.progress.report("mengompres", at(span, done / all), `Halaman ${Math.min(done + 1, all)} dari ${all}`),
+      onPage: (done, all) => job.progress.report("mengompres", at(span, done / all), label(Math.min(done + 1, all), all)),
     });
     this.estimates.set(index, estimateRasterPdfBytes(pages));
     this.encoded.set(index, pages);
@@ -586,7 +682,7 @@ class RasterTrials {
     const pages = await this.encode(index);
     const { job } = this;
     throwIfAborted(job.signal);
-    job.progress.report("menyusun", job.progress.ratio, "Menyusun PDF");
+    job.progress.report("mengompres", job.progress.ratio, "Memeriksa ukuran hasil");
     const bytes = await buildRasterPdf(pages, this.master, { title: job.info.title });
     const step = this.steps[index];
     return { bytes, strategy: "rasterize", settings: { dpi: step.dpi, quality: step.quality } };
@@ -597,11 +693,13 @@ async function renderAllMasters(job: Job, dpi: number, span: Span): Promise<Rast
   job.rasterTried = true;
   const total = job.info.pageCount;
   job.progress.report("mengompres", span.from, `Menggambar halaman 1 dari ${total}`);
-  return renderMasters(await job.pdfjs.get(), dpi, {
+  const master = await renderMasters(await job.pdfjs.get(), dpi, {
     signal: job.signal,
     onPage: (done, all) =>
       job.progress.report("mengompres", at(span, done / all), `Menggambar halaman ${Math.min(done + 1, all)} dari ${all}`),
   });
+  job.lostLinks = master.hasLinks;
+  return master;
 }
 
 function rasterSpans(job: Job): { masters: Span; trials: Span } {
@@ -613,6 +711,8 @@ function rasterSpans(job: Job): { masters: Span; trials: Span } {
 async function stageRasterTarget(job: Job, target: number): Promise<{ outcome: Outcome; met: boolean }> {
   const spans = rasterSpans(job);
   const master = await renderAllMasters(job, MAX_RASTER_DPI, spans.masters);
+  // Percobaan cukup memakai master JPEG; worker pdf.js (salinan file) dilepas.
+  await job.pdfjs.close();
   const trials = new RasterTrials(job, master, RASTER_LADDER, spans.trials, target);
   const found = await searchLadder(RASTER_LADDER, (_step, i) => trials.estimate(i), target);
   if (!found.met) return { outcome: await trials.build(found.index), met: false };
@@ -629,6 +729,7 @@ async function stageRasterTarget(job: Job, target: number): Promise<{ outcome: O
 async function stageRasterSingle(job: Job, step: RasterStep): Promise<Outcome> {
   const spans = rasterSpans(job);
   const master = await renderAllMasters(job, step.dpi, spans.masters);
+  await job.pdfjs.close();
   const trials = new RasterTrials(job, master, [step], spans.trials, null);
   return trials.build(0);
 }
@@ -711,17 +812,27 @@ const NEAR_MISS_FOR_GRAY_TIP = 1.08;
 const SMALL_IMAGE_SIDE = 1000;
 /** Dpi serendah ini membuat tulisan kecil sulit terbaca. */
 const LOW_DPI = 72;
+/** Gambar yang tak bisa diolah sebesar ini (porsi file) layak disebut di catatan. */
+const INELIGIBLE_SHARE_FOR_NOTE = 0.4;
 
+// Catatan ditulis dengan gaya bahasa situs (santai, "kamu", "nggak") karena
+// langsung tampil di tanda terima. Catatan vonis target diawali "Target " dan
+// saran diawali "Coba " — tampilan memakai awalan itu (labels.ts).
 function buildNotes(job: Job, final: Final, mode: CompressMode): string[] {
   const notes: string[] = [];
   const { strategy, settings, bytes } = final.outcome;
   const { info } = job;
   const changed = strategy !== "original";
+  const ineligibleDominates = job.ineligibleBytes >= bytes.length * INELIGIBLE_SHARE_FOR_NOTE;
+  const outOfMemory = job.skipped.some(isOutOfMemory);
 
   if (mode.kind === "target") {
-    if (final.met && !changed) notes.push("Ukurannya sudah di bawah target, jadi file tidak diubah.");
+    if (final.met && !changed) notes.push("Ukurannya sudah di bawah target, jadi file-nya nggak diubah.");
     if (!final.met) {
       notes.push(`Target ${formatBytes(mode.targetBytes)} belum tercapai. Hasil terkecil ${formatBytes(bytes.length)}.`);
+      if (info.isXfa) {
+        notes.push("PDF ini formulir XFA, jadi halamannya nggak bisa diubah jadi gambar untuk dikecilkan lagi.");
+      }
       const tips: string[] = [];
       // Hitam-putih hanya menghemat sedikit di kualitas serendah ini; sarankan
       // hanya bila memang tinggal sedikit lagi.
@@ -730,11 +841,10 @@ function buildNotes(job: Job, final: Final, mode: CompressMode): string[] {
       if (tips.length > 0) notes.push(`Coba ${tips.join(", atau ")}.`);
     }
   } else if (!changed) {
-    // Tanpa pdf-lib (struktur yang tidak bisa diolah) hanya rasterize yang tersisa.
+    notes.push(levelUnchangedNote(job, ineligibleDominates, outOfMemory));
+  } else if (ineligibleDominates && strategy !== "rasterize") {
     notes.push(
-      job.editable === null && !job.rasterTried
-        ? "PDF ini hanya bisa dikecilkan dengan mengubah halamannya jadi gambar. Coba level Kuat atau pilih target ukuran."
-        : "File ini sudah cukup ringkas, jadi tidak diubah.",
+      "Sebagian gambar di PDF ini belum bisa dikecilkan tanpa mengubah halamannya jadi gambar. Tingkat Kuat bisa lebih kecil.",
     );
   }
 
@@ -742,35 +852,76 @@ function buildNotes(job: Job, final: Final, mode: CompressMode): string[] {
   const lowImages =
     strategy === "images" && settings.maxImageSide !== undefined && settings.maxImageSide < SMALL_IMAGE_SIDE;
   if (strategy === "rasterize" && info.hasAnyText) {
-    notes.push("Teks di PDF ini sekarang berupa gambar, jadi tidak bisa disalin atau dicari.");
+    notes.push("Teks di PDF ini sekarang berupa gambar, jadi nggak bisa disalin atau dicari.");
+  }
+  if (strategy === "rasterize") {
+    const lost = lostFeatures(job);
+    if (lost) notes.push(`${lost} di PDF ini nggak ikut ke file hasil. Yang tersisa cuma tampilannya.`);
   }
   if (lowRaster || (lowImages && !info.hasAnyText)) {
-    notes.push("Resolusinya diturunkan cukup banyak supaya muat. Periksa dulu apakah tulisannya masih terbaca.");
+    notes.push("Resolusinya diturunkan cukup banyak biar muat. Perbesar dan cek dulu tulisan kecil dan angkanya masih kebaca.");
   } else if (lowImages) {
-    notes.push("Gambar di dalamnya diperkecil cukup banyak. Periksa dulu apakah masih jelas.");
+    notes.push("Gambar di dalamnya diperkecil cukup banyak. Cek dulu masih jelas atau nggak.");
   }
 
-  if (job.grayscale && changed) {
-    if (strategy === "optimize") notes.push("Tidak ada gambar yang bisa diubah jadi hitam-putih di PDF ini.");
-    else if (strategy === "images" && info.hasAnyText) {
-      notes.push("Hitam-putih hanya diterapkan pada gambar; teks dan garis tetap seperti aslinya.");
+  if (job.grayscale) {
+    if (strategy === "original" || strategy === "optimize") {
+      notes.push("Hitam-putih nggak diterapkan, karena gambar di PDF ini belum bisa diubah tanpa mengubah halamannya.");
+    } else if (strategy === "images" && info.hasAnyText) {
+      notes.push("Hitam-putih cuma berlaku untuk gambar. Teks dan garisnya tetap seperti aslinya.");
     }
   }
 
   if (changed && info.encrypted) {
     notes.push(
       job.passwordGiven
-        ? "File hasil tidak lagi dikunci password, jadi simpan baik-baik."
-        : "Proteksi (pembatasan salin/edit) di PDF asli tidak ikut ke file hasil.",
+        ? "File hasilnya nggak dikunci password lagi, jadi simpan baik-baik."
+        : "Proteksi (larangan salin/edit) di PDF asli nggak ikut ke file hasil.",
     );
   }
   if (changed && info.hasSignatures) {
     notes.push(
-      "Tanda tangan digital (mis. e-meterai) di PDF ini tidak berlaku lagi di file hasil. Kalau harus sah, unggah file aslinya.",
+      "Tanda tangan digital (misalnya e-meterai) di PDF ini nggak berlaku lagi di file hasil. Kalau harus sah, upload file aslinya.",
     );
   }
-  if (changed && job.skipped.some(isOutOfMemory)) {
-    notes.push("Memori perangkat tidak cukup untuk mencoba semua cara, jadi hasilnya mungkin belum yang terkecil.");
+  if (changed && outOfMemory) {
+    notes.push("Memori perangkatmu nggak cukup untuk mencoba semua cara, jadi hasilnya mungkin belum yang terkecil.");
   }
   return notes;
+}
+
+/** Mode level, file asli dikembalikan: jelaskan alasan yang sebenarnya. */
+function levelUnchangedNote(job: Job, ineligibleDominates: boolean, outOfMemory: boolean): string {
+  if (outOfMemory) {
+    return "Memori perangkatmu nggak cukup untuk mengecilkan gambar di PDF ini. Tutup aplikasi lain lalu coba lagi, atau pakai laptop.";
+  }
+  if (job.info.isXfa) {
+    return "PDF ini formulir XFA, jadi halamannya nggak bisa diubah jadi gambar. Ukuran ini sudah yang paling kecil yang aman.";
+  }
+  // Gambar yang belum bisa diolah (CMYK, JPEG 2000, dst.) adalah alasan yang
+  // lebih berguna daripada "cuma hemat sedikit": ada jalan keluarnya.
+  if (!job.rasterTried && ((job.editable === null && job.produced === 0) || ineligibleDominates)) {
+    return "PDF ini cuma bisa dikecilkan dengan mengubah halamannya jadi gambar. Coba tingkat Kuat atau pilih target ukuran.";
+  }
+  if (job.smallGain !== null) {
+    const share = job.smallGain / job.input.length;
+    const pct = share < 0.01 ? "kurang dari 1%" : `${Math.round(share * 100)}%`;
+    return job.info.hasSignatures
+      ? `Cuma bisa hemat ${formatBytes(job.smallGain)}, jadi file aslinya nggak diubah supaya tanda tangan digitalnya tetap sah.`
+      : `Cuma bisa hemat ${formatBytes(job.smallGain)} (${pct}), jadi file aslinya nggak diubah.`;
+  }
+  return "File ini sudah cukup ringkas, jadi nggak diubah.";
+}
+
+/** "Daftar isi, tautan, dan isian formulir" — yang hilang bila halaman jadi gambar. */
+function lostFeatures(job: Job): string | null {
+  const { info } = job;
+  const parts: string[] = [];
+  if (info.hasOutline) parts.push("daftar isi (bookmark)");
+  if (job.lostLinks) parts.push("tautan");
+  if (info.hasForm) parts.push("isian formulir");
+  if (info.hasAttachments) parts.push("lampiran");
+  if (parts.length === 0) return null;
+  const text = parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(", ")} dan ${parts[parts.length - 1]}`;
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }

@@ -12,7 +12,7 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "fixtures": "node tests/fixtures/make-fixtures.mjs && python3 tests/fixtures/make-encrypted.py",
+    "fixtures": "node tests/fixtures/make-fixtures.mjs && python3 tests/fixtures/make-encrypted.py && python3 tests/fixtures/make-tricky.py",
     "test:e2e": "playwright test"
   },
   "dependencies": {

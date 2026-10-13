@@ -7,9 +7,9 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
-import { decodePDFRawStream, PDFArray, PDFDocument, PDFRawStream, PDFRef, StandardFonts } from "pdf-lib";
+import { decodePDFRawStream, PDFArray, PDFDocument, PDFHexString, PDFRawStream, PDFRef, PDFString, StandardFonts } from "pdf-lib";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { loadDecrypted, md5, rc4 } from "../decrypt";
+import { loadDecrypted, md5, pdfStringBytes, rc4 } from "../decrypt";
 
 const dir = mkdtempSync(join(tmpdir(), "wuspot-decrypt-"));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
@@ -59,6 +59,8 @@ interface Variant {
   objectStreams: boolean;
   /** Password yang dipakai untuk membuka. */
   password: string;
+  /** Simpan sebagai "Fast Web View" (linearized), seperti bawaan Acrobat. */
+  linearize?: boolean;
 }
 
 const VARIANTS: Variant[] = [
@@ -72,6 +74,10 @@ const VARIANTS: Variant[] = [
   { name: "hanya password pemilik (R4 AES)", enc: "owner='pemilik', user='', R=4, aes=True", objectStreams: true, password: "" },
   { name: "metadata tidak dienkripsi (R4)", enc: "owner='pemilik', user='', R=4, aes=True, metadata=False", objectStreams: false, password: "" },
   { name: "password Unicode (R6)", enc: "owner='pemilik', user='rahasiä', R=6", objectStreams: true, password: "rahasiä" },
+  // Linearized + object stream: trailer /Encrypt & /Info hanya ada di stream xref
+  // halaman pertama (lihat pdflib-patches.ts).
+  { name: "linearized, hanya password pemilik (R4 AES)", enc: "owner='pemilik', user='', R=4, aes=True", objectStreams: true, password: "", linearize: true },
+  { name: "linearized, password pembuka (R6)", enc: "owner='pemilik', user='kunci', R=6", objectStreams: true, password: "kunci", linearize: true },
 ];
 
 let source: Uint8Array;
@@ -89,7 +95,7 @@ beforeAll(async () => {
     const script = [
       "import pikepdf, sys",
       `p = pikepdf.open(${JSON.stringify(src)})`,
-      `p.save(${JSON.stringify(out)}, encryption=pikepdf.Encryption(${v.enc}), object_stream_mode=pikepdf.ObjectStreamMode.${mode})`,
+      `p.save(${JSON.stringify(out)}, encryption=pikepdf.Encryption(${v.enc}), object_stream_mode=pikepdf.ObjectStreamMode.${mode}${v.linearize ? ", linearize=True" : ""})`,
     ].join("\n");
     execFileSync("python3", ["-c", script]);
     files.set(v.name, new Uint8Array(readFileSync(out)));
@@ -106,6 +112,24 @@ function pageText(doc: PDFDocument, index: number): string {
   }
   return text;
 }
+
+describe("pdfStringBytes (ISO 32000 7.3.4)", () => {
+  const hex = (b: Uint8Array) => Buffer.from(b).toString("hex");
+
+  it("string hex: spasi & baris baru diabaikan, digit ganjil diberi 0", () => {
+    expect(hex(pdfStringBytes(PDFHexString.of("4a 6b\n 7C\r\n0")))).toBe("4a6b7c00");
+    expect(hex(pdfStringBytes(PDFHexString.of("")))).toBe("");
+  });
+
+  it("string literal: escape, oktal, dan sambungan baris", () => {
+    // \n \r \t \b \f \( \) \\ lalu oktal 1-3 digit
+    expect(hex(pdfStringBytes(PDFString.of("a\\n\\r\\t\\b\\f\\(\\)\\\\b")))).toBe("610a0d09080c28295c62");
+    expect(hex(pdfStringBytes(PDFString.of("\\101\\0\\7779")))).toBe("4100ff39");
+    // backslash + CRLF / LF = sambungan (tanpa byte); CR mentah dibaca LF
+    expect(hex(pdfStringBytes(PDFString.of("ab\\\r\ncd\\\nef")))).toBe("616263646566");
+    expect(hex(pdfStringBytes(PDFString.of("x\r\ny\rz")))).toBe("780a790a7a");
+  });
+});
 
 describe("primitif kripto", () => {
   it("md5 sama dengan node:crypto", () => {
@@ -132,6 +156,7 @@ describe.skipIf(!available)("loadDecrypted", () => {
       expect(d.isEncrypted).toBe(false);
       expect(d.getPageCount()).toBe(3);
       expect(d.getTitle()).toBe(TITLE);
+      expect(d.getAuthor()).toBe("Universitas (contoh)");
       // Content stream hasil dekripsi identik dengan aslinya.
       const original = await PDFDocument.load(source);
       for (let i = 0; i < 3; i++) expect(pageText(d, i)).toBe(pageText(original, i));
