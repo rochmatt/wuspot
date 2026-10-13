@@ -859,7 +859,11 @@ function buildNotes(job: Job, final: Final, mode: CompressMode): string[] {
     if (lost) notes.push(`${lost} di PDF ini nggak ikut ke file hasil. Yang tersisa cuma tampilannya.`);
   }
   if (lowRaster || (lowImages && !info.hasAnyText)) {
-    notes.push("Resolusinya diturunkan cukup banyak biar muat. Perbesar dan cek dulu tulisan kecil dan angkanya masih kebaca.");
+    notes.push(
+      final.met === false
+        ? "Resolusinya sudah diturunkan sampai batas terendah. Perbesar dan cek dulu tulisan kecil dan angkanya masih kebaca."
+        : "Resolusinya diturunkan cukup banyak biar muat. Perbesar dan cek dulu tulisan kecil dan angkanya masih kebaca.",
+    );
   } else if (lowImages) {
     notes.push("Gambar di dalamnya diperkecil cukup banyak. Cek dulu masih jelas atau nggak.");
   }
@@ -922,6 +926,9 @@ function lostFeatures(job: Job): string | null {
   if (info.hasForm) parts.push("isian formulir");
   if (info.hasAttachments) parts.push("lampiran");
   if (parts.length === 0) return null;
-  const text = parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(", ")} dan ${parts[parts.length - 1]}`;
+  // Ejaan baku: "a dan b", tapi "a, b, dan c".
+  const last = parts[parts.length - 1];
+  const text =
+    parts.length === 1 ? last : parts.length === 2 ? `${parts[0]} dan ${last}` : `${parts.slice(0, -1).join(", ")}, dan ${last}`;
   return text.charAt(0).toUpperCase() + text.slice(1);
 }

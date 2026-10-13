@@ -372,6 +372,15 @@ function ErrorState({ status, onPickFile }: Props & { status: Extract<KompresSta
 /* ---------- selesai ---------- */
 
 /**
+ * Baris "Teks" di tanda terima. PDF hasil scan memang tidak punya teks yang
+ * bisa disalin sejak awal, jadi jangan ditulis "jadi gambar".
+ */
+function textState(r: CompressResult): string {
+  if (r.textPreserved) return "bisa disalin";
+  return r.notes.some((n) => n.startsWith("Teks di PDF ini")) ? "jadi gambar" : "hasil scan";
+}
+
+/**
  * Satu kalimat tentang apa yang dilakukan pada file. `null` bila mesin sudah
  * menjelaskannya sendiri (mis. "teks sekarang berupa gambar").
  */
@@ -555,7 +564,7 @@ function Done({
             )}
             <li>
               <span>Teks</span>
-              <b>{r.textPreserved ? "bisa disalin" : "jadi gambar"}</b>
+              <b>{textState(r)}</b>
             </li>
             <li>
               <span>Ongkos</span>

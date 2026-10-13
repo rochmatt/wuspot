@@ -62,7 +62,7 @@ export function makeDemo(name: string): DemoView | null {
         notes: [
           "Target 97 KB belum tercapai. Hasil terkecil 143 KB.",
           "Coba kirim halaman yang diminta saja atau pisahkan jadi beberapa file.",
-          "Resolusinya diturunkan cukup banyak supaya muat. Periksa dulu apakah tulisannya masih terbaca.",
+          "Resolusinya sudah diturunkan sampai batas terendah. Perbesar dan cek dulu tulisan kecil dan angkanya masih kebaca.",
         ],
       });
       return {
